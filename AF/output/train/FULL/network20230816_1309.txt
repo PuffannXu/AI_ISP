@@ -1,0 +1,52 @@
+
+ *** Training configuration ***
+ Epochs .......... : 10
+ Batch size ...... : 1
+ Learning rate ... : 1e-05
+ Random seed ..... : 0
+ *** RRAM configuration ***
+ img_quant_flag .. : 1
+ isint ........... : 0
+ weight_bit ...... : 4
+ output_bit ...... : 8
+ noise_scale ..... : 0
+ clamp_std ....... : 0
+Net_V1(
+  (conv1): Sequential(
+    (0): Conv2d_quant_noise(2, 8, kernel_size=(5, 5), stride=(2, 2), padding=(2, 2), bias=False)
+  )
+  (relu1): ReLU(inplace=True)
+  (conv2): Sequential(
+    (0): Conv2d_quant_noise(8, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu2): ReLU(inplace=True)
+  (conv3): Sequential(
+    (0): Conv2d_quant_noise(32, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu3): ReLU(inplace=True)
+  (conv4): Sequential(
+    (0): Conv2d_quant_noise(64, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu4): ReLU(inplace=True)
+  (conv5): Sequential(
+    (0): Conv2d_quant_noise(128, 256, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu5): ReLU(inplace=True)
+  (conv6): Sequential(
+    (0): Conv2d_quant_noise(256, 128, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu6): ReLU(inplace=True)
+  (conv7): Sequential(
+    (0): Conv2d_quant_noise(128, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu7): ReLU(inplace=True)
+  (conv8): Sequential(
+    (0): Conv2d_quant_noise(64, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu8): ReLU(inplace=True)
+  (conv9): Sequential(
+    (0): Conv2d_quant_noise(32, 1, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
+  )
+  (relu9): ReLU(inplace=True)
+  (dropout): Dropout(p=0.5, inplace=False)
+)None

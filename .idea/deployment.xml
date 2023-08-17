@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" autoUpload="Always" serverName="root@10.10.11.20:1022 password" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+    <option name="confirmBeforeUploading" value="false" />
+    <serverData>
+      <paths name="root@10.10.11.20:1022 password">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/project/xupf/Projects/AI_ISP" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath path="/home/xupf/Projects/AI_ISP/AWB/code/dataset/image/IMG_0372.png" />
+            <excludedPath path="/home/xupf/Projects/AI_ISP/AWB/output/train/FULL_fold_0" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+      <paths name="root@101.6.93.52:1022 password">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+    </serverData>
+    <option name="myAutoUpload" value="ALWAYS" />
+  </component>
+</project>
