@@ -1,8 +1,8 @@
 import os
 import cv2
 import numpy as np
-from AF.code.core.utils import crop, depth2focus
-from AF.code.core.settings import ROI_SIZE
+from core.utils import crop, depth2focus
+from core.settings import ROI_SIZE
 from matplotlib import pyplot as plt
 
 cam_pos = "center"

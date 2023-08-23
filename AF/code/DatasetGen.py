@@ -2,7 +2,7 @@ import os
 
 import cv2
 import numpy as np
-from AF.code.core.utils import cal_ig, cal_la
+from core.utils import cal_ig, cal_la
 
 def find_max_metrics(filename):
     max_so = 0

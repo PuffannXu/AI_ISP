@@ -5,8 +5,8 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 from matplotlib import pyplot as plt
-from AWB.code.core.utils import normalize, linear_to_nonlinear, bgr_to_rgb
-from AWB.code.core.DataAugmenter import DataAugmenter as da
+from core.utils import normalize, linear_to_nonlinear, bgr_to_rgb
+from core.DataAugmenter import DataAugmenter as da
 
 PATH_TO_IMAGES = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/code/dataset/image")
 PATH_TO_COORDINATES = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/code/dataset/coordinates")

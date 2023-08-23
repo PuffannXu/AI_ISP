@@ -1,13 +1,13 @@
 import os
 import cv2
 import numpy as np
-from core.utils import crop, depth2focus
-from core.settings import ROI_SIZE
+from AF.code.core.utils import crop, depth2focus
+from AF.code.core.settings import ROI_SIZE
 from matplotlib import pyplot as plt
 
 from matplotlib import pyplot as plt
-from core.utils import normalize, linear_to_nonlinear
-from core.utils import scale, cal_ig
+from AWB.code.core.utils import normalize, linear_to_nonlinear
+from AF.code.core.utils import scale, cal_ig
 ROI_SIZE = 256
 """
 BASE_PATH = os.path.join("/home/project/xupf/Databases/AF")

@@ -7,7 +7,7 @@ import torch.utils.data as data
 from matplotlib import pyplot as plt
 import time
 from AWB.code.core.utils import normalize, bgr_to_rgb, linear_to_nonlinear, hwc_to_chw
-from AWB.code.core.DataAugmenter import DataAugmenter
+from core.DataAugmenter import DataAugmenter
 
 save_data = False
 class ColorCheckerDataset(data.Dataset):

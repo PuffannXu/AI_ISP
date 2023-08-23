@@ -26,14 +26,15 @@ class Model:
 
 
     def get_loss(self, pred: Tensor, label: Tensor) -> Tensor:
-        loss = nn.MSELoss()
+        #loss = nn.MSELoss()
+        loss = nn.SmoothL1Loss()
         pred = pred.to(torch.float32)
         label = label.to(torch.float32)
         pred = pred.squeeze()
         label = label.squeeze()
         mse = loss(pred.to(self._device), label.to(self._device))
-        rmse = mse**0.5
-        return rmse
+        #rmse = mse**0.5
+        return mse
 
     def train_mode(self):
         self._network = self._network.train()

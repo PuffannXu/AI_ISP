@@ -14,12 +14,11 @@ from random import random
 import numpy as np
 import torch
 import time
-from AF.code.core.utils import scale, hwc_to_chw
+from core.utils import scale, hwc_to_chw
 from AF.model.AFNet import Model
 from RRAM import my_utils as my
-from AF.code.core.settings import DEVICE
-from AF.code.core.Evaluator import Evaluator
-
+from core.settings import DEVICE
+import cv2
 # ====================================================================================
 # 定义常量
 # ====================================================================================
@@ -35,16 +34,20 @@ isint = 0       # 量化为整型
 version = 2     # 网络版本，2为包含全连接的版本，与AF更相似，效果更好；1为全卷积版
 #
 MAX_FOCUS_TIME = 7 # 最大对焦次数，文献中为7
-NEARNESS_THRESHOLD = 40 # 误差范围内视为成功，文献中为7,5,3,1
-POSITION_ERROR = 20
+NEARNESS_THRESHOLD = 5 # 误差范围内视为成功，文献中为7,5,3,1
+POSITION_ERROR = round(random()*60-30)#20#30 # round(random()*60-30)
 
 # ====================================================================================
 # 定义路径
 # ====================================================================================
 
-DATASET = "top_0.5_0.5"
+DATASET = "la_512_train_0to1_top_0.5_0.5"
+DATANAME = DATASET.strip().split("_")[-3]+"_"+DATASET.strip().split("_")[-2]+"_"+DATASET.strip().split("_")[-1]
+# 权重
+path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/I8W4O8_n0.075/model_V2.pth")
+
 # 输出结果
-PATH_TO_SAVED = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/test_{}".format(DATASET),
+PATH_TO_SAVED = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/test/{}".format(DATASET),
                              "PositionError_{}_{}".format(POSITION_ERROR, str(time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time())))))
 os.makedirs(PATH_TO_SAVED, exist_ok=True)
 # 场景元数据
@@ -52,8 +55,7 @@ os.makedirs(PATH_TO_SAVED, exist_ok=True)
 path_to_metadata = "/home/project/xupf/Databases/AF_{}/{}.csv".format(DATASET,DATASET)
 # 输入数据
 path_to_data = os.path.join("/home/project/xupf/Databases/AF_{}", "numpy_data").format(DATASET)
-# 权重
-path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/I8W4O8_n0.075/model_V2.pth")
+
 
 
 # ====================================================================================
@@ -96,15 +98,17 @@ for r in range(len(metadata)):
     CorrectPosition = int(CorrectPosition)
     # 如果没有文件，跳过
     try:
-        img = np.array(np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CorrectPosition,DATASET))),
+        img = np.array(np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CorrectPosition,DATANAME))),
                        dtype='uint16')
     except FileNotFoundError:
         continue
-    else:
+    if median_depth > 450:
         InputNumber += 1
         # 随机初始化对焦点[0,48]
-        InitialPosition = round(random() * 48)
-        #InitialPosition = CorrectPosition + POSITION_ERROR
+        #InitialPosition = round(random() * 48)
+        #POSITION_ERROR = InitialPosition - CorrectPosition
+        # InitialPosition = 4
+        InitialPosition = CorrectPosition + POSITION_ERROR
         if InitialPosition > 48:
             InitialPosition = 48
         if InitialPosition < 0:
@@ -114,13 +118,13 @@ for r in range(len(metadata)):
         for focus_time in range(MAX_FOCUS_TIME):
             try:
                 img = np.array(
-                    np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CurrentPosition, DATASET))),
+                    np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CurrentPosition, DATANAME))),
                     dtype='uint16')
             except FileNotFoundError:
                 continue
 
             label = CorrectPosition - CurrentPosition
-
+            img = cv2.resize(img, dsize=(256,256), fx=0.5, fy=0.5)
             img = hwc_to_chw(scale(img))
             img = torch.from_numpy(img.copy())
             img = img.unsqueeze(0)
@@ -132,7 +136,7 @@ for r in range(len(metadata)):
                 img, _ = my.data_quantization_sym(img, half_level=2 ** input_bit / 2 - 1)
                 img = img.float()
             pred, a = model.predict(img, return_steps=True)
-            loss = model.get_loss(pred, label).item()
+            loss = float(pred - label)#model.get_loss(pred, label).item()
             # 中间结果
             print('\t - Input: {} - label: {} | pred: {} | Loss: {:f}'.format(Filename, label, pred, loss))
             with open(os.path.join(PATH_TO_SAVED, 'test_interval_results.csv'), 'a') as f:
@@ -142,13 +146,13 @@ for r in range(len(metadata)):
                 CurrentPosition = 0
             if CurrentPosition > 48:
                 CurrentPosition = 48
-            if loss < NEARNESS_THRESHOLD:
+            if abs(loss) < NEARNESS_THRESHOLD:
                 MovementsTimesList.append(focus_time+1)   # 只考虑成功的移动次数
                 FinalPositionErrorList.append(loss)     # 只考虑成功的误差
                 SuccessTimes += 1
                 break
         # 每一张图的结果
-        Success = loss < NEARNESS_THRESHOLD
+        Success = abs(loss) < NEARNESS_THRESHOLD
         print('\t ==========================================================')
         print('\t Input: {} - CorrectPosition: {} | InitialPosition: {}'.format(Filename, CorrectPosition, InitialPosition))
         print('\t Success: {} - focus_time: {} | Loss: {:f}'.format(Success, focus_time+1, loss))
@@ -163,7 +167,7 @@ MeanError = np.mean(FinalPositionErrorList)
 MeanMovement = np.mean(MovementsTimesList)
 print('\t =============================== FINAL RESULTS ===================================')
 print("InputNumber", InputNumber, "MeanInitialPosition", MeanInitialPositionError,
-      "SuccessRate", SuccessRate, "MeanError", MeanError, "MeanMovement", MeanMovement)
+      "SuccessRate {:4f}".format(SuccessRate), "MeanError", MeanError, "MeanMovement", MeanMovement)
 with open(os.path.join(PATH_TO_SAVED, 'test_total_results.csv'), 'a') as f:
     print("InputNumber", InputNumber, "MAX_FOCUS_TIME", MAX_FOCUS_TIME, "NEARNESS_THRESHOLD", NEARNESS_THRESHOLD,
           "MeanInitialPositionError", MeanInitialPositionError,"SuccessRate", SuccessRate, "MeanError", MeanError, "MeanMovement", MeanMovement,

@@ -3,7 +3,8 @@ from typing import Union, Tuple
 import torch
 from torch import nn, Tensor
 
-from AF.code.core.Model import Model
+from core.Model import Model
+from AF.code.core.Network import Network
 from RRAM import my_utils as my
 import torch.nn.functional as F
 
@@ -25,7 +26,16 @@ class Model(Model):
 
     def predict(self, img: Tensor, return_steps: bool = False) -> Union[Tensor, Tuple]:
         return self._network(img)
-
+    def get_loss(self, pred: Tensor, label: Tensor) -> Tensor:
+        #loss = nn.MSELoss()
+        loss = nn.SmoothL1Loss()
+        pred = pred.to(torch.float32)
+        label = label.to(torch.float32)
+        pred = pred.squeeze()
+        label = label.squeeze()
+        mse = loss(pred.to(self._device), label.to(self._device))
+        #rmse = mse**0.5
+        return mse
     def optimize(self, img: Tensor, label: Tensor) -> float:
         self._optimizer.zero_grad()
         pred, _ = self.predict(img)
@@ -36,7 +46,7 @@ class Model(Model):
         self._optimizer.step()
         return loss.item()
 
-class Net_V1(torch.nn.Module):
+class Net_V1(Network):
 
     def __init__(self,
                  qn_on: bool,
@@ -122,7 +132,7 @@ class Net_V1(torch.nn.Module):
         return out, a
 
 
-class Net_V2(torch.nn.Module):
+class Net_V2(Network):
 
     def __init__(self,
                  qn_on: bool,
@@ -169,7 +179,6 @@ class Net_V2(torch.nn.Module):
         a['conv1_no_relu'] = x
         x = F.relu(x)
         a['conv1_relu'] = x
-
         x = F.max_pool2d(x, kernel_size=(2, 2))
         a['max_pool2d'] = x
 
@@ -178,7 +187,6 @@ class Net_V2(torch.nn.Module):
         a['conv2_no_relu'] = x
         x = F.relu(x)
         a['conv2_relu'] = x
-
         x = F.max_pool2d(x, kernel_size=(2, 2))
         a['max_pool2d'] = x
 
@@ -187,7 +195,6 @@ class Net_V2(torch.nn.Module):
         a['conv3_no_relu'] = x
         x = F.relu(x)
         a['conv3_relu'] = x
-
         x = F.max_pool2d(x, kernel_size=(2, 2))
         a['max_pool2d'] = x
 
@@ -196,6 +203,7 @@ class Net_V2(torch.nn.Module):
         a['conv4_no_relu'] = x
         x = F.relu(x)
         a['conv4_relu'] = x
+
         # 第5层
         x = self.conv5(x)
         a['conv5_no_relu'] = x
@@ -217,10 +225,10 @@ class Net_V2(torch.nn.Module):
         #x = self.dropout(x)
         #a['dropout'] = x
 
-        x = self.fc3(x)
-        a['fc1_no_relu'] = x
+        out = self.fc3(x)
+        a['fc3_no_relu'] = out
         #x = self.dropout(x)
         #a['dropout'] = x
 
-        out = x.squeeze() / 2
+        #out = out.squeeze() / 2
         return out, a

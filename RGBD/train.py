@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -10,8 +11,8 @@ from core.settings import DEVICE, make_deterministic
 from core.utils import print_metrics, log_metrics
 from core.Evaluator import Evaluator
 from core.LossTracker import LossTracker
-from AF.code.LoadDataset import Dataset
-from AF.model.AFNet import Model
+from RGBD.code.LoadDataset import Dataset
+from RGBD.RGBDNet import Model
 from RRAM import my_utils as my
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -19,15 +20,20 @@ from RRAM import my_utils as my
 # 训练参数
 # ======================================== #
 RANDOM_SEED = 0
-EPOCHS = 30
-BATCH_SIZE = 32
+EPOCHS = 20
+EVAL_EPOCH = 1
+VIS_EPOCH = 2
+
+BATCH_SIZE = 16
 LEARNING_RATE = 0.0001
-DATASET = "la_512_train_0to6_top_0.6_0.6"
+
+
 
 # ======================================== #
 # 量化训练参数
 # ======================================== #
 img_quant_flag = 1
+
 qn_on = True
 isint = 0
 input_bit = 8
@@ -36,9 +42,12 @@ output_bit = 8
 clamp_std = 0
 noise_scale = 0.075
 
-version = 2
+version = 4
+rgb_channel = 3
 RELOAD_CHECKPOINT = True
-FREEZE = False
+
+output = "depth"
+
 # ======================================== #
 # 保存设置参数
 # ======================================== #
@@ -47,11 +56,10 @@ SAVE_TB = False
 SAVE_LOG = False
 if qn_on:
     model_name = "I{}W{}O{}_n{}".format(str(input_bit),str(weight_bit),str(output_bit),noise_scale)
-    #PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/model/I8W4O8n0.075_model_V2.pth")
-    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/{}/model_V{}.pth".format(model_name, version))#/model/I8W4O8n0.075_model_V2.pth")#I8W4O8_n0.075
+    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/RGBD/output/train/I8W4O8_n0.075/model_V{}.pth".format(version))#/model/I8W4O8n0.075_model_V2.pth")#I8W4O8_n0.075
 else:
     model_name = "FULL"
-    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/{}/model_V{}.pth".format(model_name, version))
+    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/RGBD/output/train/{}/model_V{}.pth".format(model_name, version))
 
 
 # --------------------------------------------------------------------------------------------------------------------
@@ -93,26 +101,22 @@ def main(opt):
     # ======================================== #
     # 模型初始化
     # ======================================== #
-    model = Model(qn_on = qn_on, version=version, weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std, noise_scale=noise_scale)
+    model = Model(qn_on = qn_on, version=version, rgb_channel = rgb_channel,weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std, noise_scale=noise_scale)
 
     if RELOAD_CHECKPOINT:
         print('\n Reloading checkpoint - pretrained model stored at: {} \n'.format(PATH_TO_PTH_CHECKPOINT))
         model.load(PATH_TO_PTH_CHECKPOINT)
-    if FREEZE:
-        for name, para in model._network.named_parameters():
-            # 除最后的全连接层外，其他权重全部冻结
-            if "fc1" not in name:
-                para.requires_grad_(False)
-                # 或者 para.requires_grad = False
+
 
     model.print_network()
-    if SAVE_LOG is True:
-        model.log_network(path_to_log)
+    #if SAVE_LOG is True:
+    # model.log_network((3,256,256),path_to_log)
     model.set_optimizer(lr)
+    model.set_scheduler(EPOCHS)
     # ======================================== #
     # 加载数据
     # ======================================== #
-    dataset = Dataset("/home/project/xupf/Databases/AF_{}".format(DATASET))
+    dataset = Dataset(rgb_channel=rgb_channel)
     train_size = int(len(dataset) * 0.8)
     test_size = len(dataset) - train_size
 
@@ -145,23 +149,55 @@ def main(opt):
         train_loss.reset()
         start = time.time()
 
-        for i, (img, label, file_name) in enumerate(training_loader):
-            img, label = img.to(DEVICE), label.to(DEVICE)
+        for i, (rgb_image, label, depth, rawDepth) in enumerate(training_loader):
+            rgb_image, label, depth, rawDepth = rgb_image.to(DEVICE), label.to(DEVICE), depth.to(DEVICE), rawDepth.to(DEVICE)
             # quant
             if img_quant_flag == 1:
-                img, _ =  my.data_quantization_sym(img, half_level=2 ** input_bit / 2 - 1)
-                #img = img / (2 ** input_bit)
-                img = img.float()
-            loss = model.optimize(img, label)
+                rgb_image, _ = my.data_quantization_sym(rgb_image, half_level=2 ** input_bit / 2 - 1)
+                rgb_image = rgb_image.float()
+                label, _ = my.data_quantization_sym(label, half_level=2 ** input_bit / 2 - 1)
+                label = label.float()
+
+                depth, _ = my.data_quantization_sym(depth, half_level=2 ** input_bit / 2 - 1)
+                depth = depth.float()
+                rawDepth =torch.nn.functional.interpolate(rawDepth, scale_factor=1/8)
+                rawDepth = torch.nn.functional.interpolate(rawDepth, scale_factor=8)
+
+                rawDepth, _ = my.data_quantization_sym(rawDepth, half_level=2 ** input_bit / 2 - 1)
+                rawDepth = rawDepth.float()
+
+            #print(rgb_image.size())
+            #print(rawDepth.size())
+            if output == "label":
+                pred_depth, loss = model.optimize(rgb_image, rawDepth, label)
+            elif output == "depth":
+                pred_depth, loss = model.optimize(rgb_image, rawDepth, depth)
             train_loss.update(loss)
 
             if i % 5 == 0:
                 print("[ Epoch: {}/{} - Batch: {} ] | [ Train loss: {:.4f} ]".format(epoch, epochs, i, loss))
+        if epoch % VIS_EPOCH  == 0:
+            fig, axs = plt.subplots(1, 4)
+            showrgb = rgb_image.cpu()[0, :, :, :].squeeze()
+            axs[0].imshow(np.transpose(showrgb, (1, 2, 0)), cmap='gray')
+            showraw = rawDepth.cpu()[0, :, :, :].squeeze()
+            showpred = pred_depth.cpu()[0, :, :, :].squeeze()
+            axs[1].imshow(showraw, cmap='gray')
+            if output == "label":
+                showdepth = label.cpu()[0, :, :, :].squeeze()
+                axs[2].imshow(showdepth)  # ,, cmap='gray')#, cmap='gray')
+                axs[3].imshow(showpred.detach().numpy())  # ,, cmap='gray')#, cmap='gray')
+            elif output == "depth":
+                showdepth = depth.cpu()[0, :, :, :].squeeze()
+                axs[2].imshow(showdepth, cmap='gray')#, cmap='gray')
+                axs[3].imshow(showpred.detach().numpy(), cmap='gray')#, cmap='gray')
+            fig.suptitle("Epoch: {} | Train Loss: {:.4f}".format(epoch, loss))
+            fig.show()
         train_time = time.time() - start
         val_loss.reset()
         start = time.time()
 
-        if epoch % 1 == 0:
+        if epoch % EVAL_EPOCH == 0:
             evaluator.reset_errors()
             model.evaluation_mode()
 
@@ -169,22 +205,50 @@ def main(opt):
             print("\t\t\t Validation")
             print("--------------------------------------------------------------\n")
             with torch.no_grad():
-                for i, (img, label, file_name) in enumerate(test_loader):
-                    img, label = img.to(DEVICE), label.to(DEVICE)
+                for i, (rgb_image, label, depth, rawDepth) in enumerate(test_loader):
+                    rgb_image, label, depth, rawDepth = rgb_image.to(DEVICE), label.to(DEVICE), depth.to(
+                        DEVICE), rawDepth.to(DEVICE)
                     # quant
                     if img_quant_flag == 1:
-                        img, _ = my.data_quantization_sym(img, half_level=2 ** input_bit / 2 - 1)
-                        #img = img / (2 ** input_bit)
-                        img = img.float()
-                    pred, a = model.predict(img, return_steps=True)
-                    loss = model.get_loss(pred, label).item()
+                        rgb_image, _ = my.data_quantization_sym(rgb_image, half_level=2 ** input_bit / 2 - 1)
+                        rgb_image = rgb_image.float()
+                        label, _ = my.data_quantization_sym(label, half_level=2 ** input_bit / 2 - 1)
+                        label = label.float()
+                        depth, _ = my.data_quantization_sym(depth, half_level=2 ** input_bit / 2 - 1)
+                        depth = depth.float()
+                        rawDepth = torch.nn.functional.interpolate(rawDepth, scale_factor=1 / 8)
+                        rawDepth = torch.nn.functional.interpolate(rawDepth, scale_factor=8)
+
+                        rawDepth, _ = my.data_quantization_sym(rawDepth, half_level=2 ** input_bit / 2 - 1)
+                        rawDepth = rawDepth.float()
+                    pred_depth, a = model.predict(rgb_image, rawDepth)
+                    if output == "label":
+                        loss = model.get_loss(pred_depth, label).cpu().detach().numpy()
+                    elif output == "depth":
+                        loss = model.get_loss(pred_depth, depth).cpu().detach().numpy()
                     val_loss.update(loss)
-                    evaluator.add_error(model.get_loss(pred, label).item())
+                    evaluator.add_error(loss)
 
                     if i % 5 == 0:
                         print("[ Epoch: {}/{} - Batch: {}] | Val loss: {:.4f}]".format(epoch, epochs, i, loss))
+        if epoch % VIS_EPOCH == 0:
+            fig, axs = plt.subplots(1, 4)
+            showrgb = rgb_image.cpu()[0, :, :, :].squeeze()
+            axs[0].imshow(np.transpose(showrgb, (1, 2, 0)), cmap='gray')
+            showraw = rawDepth.cpu()[0, :, :, :].squeeze()
+            showpred = pred_depth.cpu()[0, :, :, :].squeeze()
+            axs[1].imshow(showraw, cmap='gray')
+            if output == "label":
+                showdepth = label.cpu()[0, :, :, :].squeeze()
+                axs[2].imshow(showdepth)  # ,, cmap='gray')#, cmap='gray')
+                axs[3].imshow(showpred.detach().numpy())  # ,, cmap='gray')#, cmap='gray')
+            elif output == "depth":
+                showdepth = depth.cpu()[0, :, :, :].squeeze()
+                axs[2].imshow(showdepth, cmap='gray')  # , cmap='gray')
+                axs[3].imshow(showpred.detach().numpy(), cmap='gray')  # , cmap='gray')
+            fig.suptitle("Epoch: {} | Valid Loss: {:.4f}".format(epoch, loss))
+            fig.show()
 
-                    img_id = file_name[0].split(".")[0]
 
 
             print("\n--------------------------------------------------------------\n")
@@ -225,7 +289,7 @@ def main(opt):
             print("....................................................................")
             print_metrics(metrics, best_metrics)
         print("********************************************************************\n")
-
+        #model.schedule()
         if 0 < val_loss.avg < best_val_loss:
             best_val_loss = val_loss.avg
             best_metrics = evaluator.update_best_metrics()

@@ -1,12 +1,14 @@
 import os
 from typing import Tuple
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.utils.data as data
 import time
-from AF.code.core.utils import scale,hwc_to_chw
+from core.utils import scale,hwc_to_chw
 from torch.utils.data import DataLoader
-
+import cv2
 save_data = False
 
 
@@ -27,14 +29,22 @@ class Dataset(data.Dataset):
     def __getitem__(self, index: int) -> Tuple:
 
         file_name = self.__fold_data[index].strip().split('data')[0]
-        pd_img = np.array(np.load(os.path.join(self.__path_to_data, file_name + 'data.npy')), dtype='uint16')
+        img512 = np.array(np.load(os.path.join(self.__path_to_data, file_name + 'data.npy')), dtype='uint16')
         focus_step = np.array(np.load(os.path.join(self.__path_to_label, file_name + 'label.npy')), dtype='float')
-        pd_img = hwc_to_chw(scale(pd_img))
-        #pd_img = hwc_to_chw(pd_img)
+        scaled_img512 = scale(img512)
+        #fig, axs = plt.subplots(1,2)
+        #axs[0].imshow(scaled_img512[:,:,0])
+        scaled_img256 = cv2.resize(scaled_img512, dsize = (256,256), fx=0.5, fy=0.5)#resize(scaled_img512, (256,256,2))
+        #axs[1].imshow(scaled_img256[:,:,0])
+        #fig.show()
+        #pd_img = pd_img.reshape(-1, 256, 256)
+        chw_scaled_img256 = hwc_to_chw(scaled_img256)
         #pd_img = pd_img.astype(float)
-        pd_img = torch.from_numpy(pd_img.copy())
+        pd_img = torch.from_numpy(chw_scaled_img256.copy())
         focus_step = torch.from_numpy(focus_step.copy())
         focus_step = focus_step.squeeze()
+
+
 
         return pd_img, focus_step, file_name
 

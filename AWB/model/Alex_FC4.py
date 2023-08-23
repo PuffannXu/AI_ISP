@@ -9,11 +9,11 @@ import torchvision.transforms.functional as F
 
 from torchvision.transforms import transforms
 
-from AWB.code.core.settings import USE_CONFIDENCE_WEIGHTED_POOLING
-from AWB.code.core.utils import correct, rescale, scale
-from AWB.code.core.Model import Model
+from core.settings import USE_CONFIDENCE_WEIGHTED_POOLING
+from core.utils import correct, rescale, scale
+from core.Model import Model
 from RRAM import my_utils as my
-
+from core.AngularLoss import AngularLoss
 
 class Model(Model):
     def __init__(self,
@@ -23,6 +23,9 @@ class Model(Model):
                  clamp_std: int, noise_scale: float,):
         super().__init__()
         self._network = Net_V2(qn_on,weight_bit,output_bit,isint,clamp_std,noise_scale).to(self._device)
+        self._criterion = AngularLoss(self._device)
+    def get_loss(self, pred: Tensor, label: Tensor) -> Tensor:
+        return self._criterion(pred, label)
 
     def predict(self, img: Tensor, return_steps: bool = False) -> Union[Tensor, Tuple]:
         """

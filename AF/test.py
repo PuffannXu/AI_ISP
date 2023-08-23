@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import torch.utils.data
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from AF.code.core.settings import DEVICE, make_deterministic
-from AF.code.core.utils import print_metrics, log_metrics, scale
-from AF.code.core.Evaluator import Evaluator
-from AF.code.core.LossTracker import LossTracker
+from core.settings import DEVICE, make_deterministic
+from core.utils import print_metrics, log_metrics, scale
+from core.Evaluator import Evaluator
+from core.LossTracker import LossTracker
 from AF.code.LoadDataset import Dataset
 from AF.model.AFNet import Model
 from RRAM import my_utils as my
