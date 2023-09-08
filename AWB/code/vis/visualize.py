@@ -42,8 +42,8 @@ def main():
     for num_fold in range(NUM_FOLDS):
         test_set = ColorCheckerDataset(train=False, folds_num=num_fold)
         dataloader = DataLoader(test_set, batch_size=1, shuffle=False, num_workers=20)
-        path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model.pth")
-        #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/FULL_fold_0/model.pth")
+        path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
+
         model.load(path_to_pretrained)
         model.evaluation_mode()
 

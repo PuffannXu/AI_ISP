@@ -28,21 +28,19 @@ class Model(Model):
                  clamp_std: int, noise_scale: float
                 ):
         super().__init__()
-        if version == 1:
-            self._network = Net_V1(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
-                                   isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
-        elif version == 2:
-            self._network = Net_V2(rgb_channel = rgb_channel,qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
-                                   isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
-        elif version == 3:
+        if version == 3:
             self._network = Net_V3(rgb_channel = rgb_channel,qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
                                    isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
         elif version == 4:
             self._network = Net_V4(rgb_channel = rgb_channel,qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
                                    isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
-        else:
-            self._network = PixTransformNet(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
+        elif version == 5:
+            self._network = Net_V5(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
+                               isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
+        elif version == 6:
+            self._network = Net_V6(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
                                    isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
+
     def predict(self, rgb_image: Tensor, rawDepth: Tensor) -> Union[Tensor, Tuple]:
         return self._network(rgb_image, rawDepth)
 
@@ -53,27 +51,21 @@ class Model(Model):
         depth = depth.to(torch.float32)
         l1_out = l1_loss(pred_depth.to(self._device), depth.to(self._device))
         ssim_out = ssim_loss(pred_depth.to(self._device), depth.to(self._device))
+        #print("l1:{},ssim:{}".format(l1_out, ssim_out))
         a = 0.85#
         final_loss = a/2*(1-ssim_out)+(1-a)*l1_out
         return final_loss
     def old_get_loss(self, pred_depth: Tensor, depth: Tensor) -> Union[Tensor, Tuple]:
-        loss = nn.MSELoss()
-        # loss_s = self.gradient_1order(pred_depth)
-        #loss = nn.SmoothL1Loss()
+        loss1 = nn.MSELoss(reduction='none')
         pred_depth = pred_depth.to(torch.float32)
-        #pred_label = pred_label.to(torch.float32)
         depth = depth.to(torch.float32)
-        #label = label.to(torch.float32)
         pred_depth = pred_depth.squeeze()
-        #pred_label = pred_label.squeeze()
         depth = depth.squeeze()
-        #label = label.squeeze()
-        depth_mse = loss(pred_depth.to(self._device), depth.to(self._device))
-        #label_mse = loss(pred_label.to(self._device), label.to(self._device))
-        #rmse = mse**0.5
-        #pred_depth = pred_depth.cpu().detach().numpy()
+        depth_mse1 = torch.div(loss1(pred_depth.to(self._device), depth.to(self._device)),depth.to(self._device))
+        depth_mse1 = torch.mean(depth_mse1)
 
-        return depth_mse**0.5 #, label_mse
+        depth_mse2 = F.mse_loss(pred_depth.to(self._device), depth.to(self._device))
+        return depth_mse2**0.5
     def optimize(self, rgb_image: Tensor, rawDepth: Tensor, depth: Tensor) -> tuple[Any, Any]:
         self._optimizer.zero_grad()
         pred_depth, _ = self.predict(rgb_image, rawDepth)
@@ -86,186 +78,6 @@ class Model(Model):
         return pred_depth, loss.cpu().detach().numpy()
 
 
-
-class Net_V1(nn.Module):
-    # 基于IFCNN
-    def __init__(self,
-                 qn_on: bool,
-                 weight_bit: int, output_bit: int,
-                 isint: int,
-                 clamp_std: int, noise_scale: float
-                 ):
-        super().__init__()
-        def conv2d(in_channels,out_channels,kernel_size,stride,padding,bias):
-            return nn.Sequential(
-                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding,
-                                      weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std,
-                                      noise_scale=noise_scale,
-                                      bias=bias),
-            )
-
-        self.conv1 = conv2d(in_channels=3,   out_channels=64,   kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv11 = conv2d(in_channels=1,   out_channels=64,   kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.conv2 = conv2d(in_channels=64,   out_channels=64,  kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.conv3 = conv2d(in_channels=64,  out_channels=64,  kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu3 = nn.ReLU(inplace=True)
-        self.conv4 = conv2d(in_channels=64,  out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu4 = nn.ReLU(inplace=True)
-        self.dropout = nn.Dropout(0.5)
-
-    def forward(self, rgb_image: Tensor, rawDepth: Tensor) ->Union[Tensor,tuple]:
-
-
-        x1 = rgb_image
-        x2 = rawDepth
-        a = {}
-        # 第1层
-        a['input_rgb_image'] = x1
-        x1 = self.conv1(x1)
-        a['conv1_no_relu'] = x1
-        x1 = self.relu1(x1)
-        a['conv1_relu'] = x1
-        # 第2层CNN
-        x1 = self.conv2(x1)
-        a['conv2_no_relu'] = x1
-        x1 = self.relu2(x1)
-        a['conv2_relu'] = x1
-
-        a['input_rgb_image'] = x2
-        x2 = self.conv11(x2)
-        a['conv1_no_relu'] = x2
-        x2 = self.relu1(x2)
-        a['conv1_relu'] = x2
-        # 第2层CNN
-        x2 = self.conv2(x2)
-        a['conv2_no_relu'] = x2
-        x2 = self.relu2(x2)
-        a['conv2_relu'] = x2
-
-
-        x = x1+x2
-
-        # 第3层
-        x = self.conv3(x)
-        a['conv3_no_relu'] = x
-        x = self.relu3(x)
-        a['conv3_relu'] = x
-        # 第4层
-        x = self.conv4(x)
-        a['conv4_no_relu'] = x
-        out = self.relu4(x)
-        a['conv4_relu'] = out
-
-        return out, a
-
-class Net_V2(nn.Module):
-
-    def __init__(self, rgb_channel: int,
-                 qn_on: bool,
-                 weight_bit: int, output_bit: int,
-                 isint: int,
-                 clamp_std: int, noise_scale: float
-                 ):
-        super().__init__()
-        def conv2d(in_channels,out_channels,kernel_size,stride,padding,bias):
-            return nn.Sequential(
-                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding,
-                                      weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std,
-                                      noise_scale=noise_scale,
-                                      bias=bias),
-            )
-
-        self.conv1 = conv2d(in_channels=rgb_channel, out_channels=32, kernel_size=3, stride=1, padding=1,
-                            bias=False)
-        self.conv2 = conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv3 = conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv4 = conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv5 = conv2d(in_channels=257, out_channels=128, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv6 = conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv7 = conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv8 = conv2d(in_channels=32, out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu = nn.ReLU(inplace=True)
-        self.unpool = torch.nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None)
-        # kernel =2
-        self.pool = nn.MaxPool2d(2, stride=2)
-
-    def forward(self, rgb_image: Tensor, rawDepth: Tensor) -> Union[Tensor, tuple]:
-        """
-        Estimate an RGB colour for the illuminant of the input image
-        @param x: the image for which the colour of the illuminant has to be estimated
-        @return: the colour estimate as a Tensor. If confidence-weighted pooling is used, the per-path colour estimates
-        and the confidence weights are returned as well (used for visualizations)
-        """
-
-
-
-        # x1 = rgb_image
-        # x1 = rawDepth
-        a = {}
-        # Encoder
-        # 第1层
-        a['input_rgb_image'] = rgb_image
-        rgb256 = self.conv1(rgb_image)
-        a['conv1_no_relu'] = rgb256
-        rgb256 = self.relu(rgb256)
-        a['conv1_relu'] = rgb256
-        rgb128 = self.pool(rgb256)
-        a['pool1'] = rgb128
-        # 第2层CNN
-        rgb128 = self.conv2(rgb128)
-        a['conv2_no_relu'] = rgb128
-        rgb128 = self.relu(rgb128)
-        a['conv2_relu'] = rgb128
-        rgb64 = self.pool(rgb128)
-        a['pool2'] = rgb64
-        # 第3层
-        rgb64 = self.conv3(rgb64)
-        a['conv3_no_relu'] = rgb64
-        rgb64 = self.relu(rgb64)
-        a['conv3_relu'] = rgb64
-        rgb32 = self.pool(rgb64)
-        a['pool3'] = rgb32
-        # 第4层
-        rgb32 = self.conv4(rgb32)
-        a['conv4_no_relu'] = rgb32
-        rgb32 = self.relu(rgb32)
-        a['conv4_relu'] = rgb32
-
-        d32 = self.pool(self.pool(self.pool(rawDepth)))
-        x = torch.cat([rgb32, d32], dim=1)
-
-        # 第5层
-        x = self.conv5(x)
-        a['conv4_no_relu'] = x
-        x = self.relu(x)
-        a['conv4_relu'] = x
-        x = self.unpool(x)
-        a['unpool1'] = x
-
-        # 第6层
-        x = self.conv6(x)
-        a['conv4_no_relu'] = x
-        x = self.relu(x)
-        a['conv4_relu'] = x
-        x = self.unpool(x)
-        a['unpool1'] = x
-        # 第7层
-        x = self.conv7(x)
-        a['conv4_no_relu'] = x
-        x = self.relu(x)
-        a['conv4_relu'] = x
-        x = self.unpool(x)
-        a['unpool1'] = x
-        # 第8层
-        # x = x + rawDepth
-        x = self.conv8(x)
-        a['conv4_no_relu'] = x
-        x = self.relu(x)
-        a['conv4_relu'] = x
-
-        return x, a
 
 class Net_V3(nn.Module):
     # 简单的encoder-decoder
@@ -290,7 +102,7 @@ class Net_V3(nn.Module):
         self.conv4 = conv2d(in_channels=128,  out_channels=256, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv5 = conv2d(in_channels=256, out_channels=128, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv6 = conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False)
-        self.conv7 = conv2d(in_channels=64, out_channels=32, kernel_size=3, stride=1, padding=1, bias=False)
+        self.conv7 = conv2d(in_channels=64, out_channels=29, kernel_size=3, stride=1, padding=1, bias=False)
         self.conv8 = conv2d(in_channels=32, out_channels=1, kernel_size=3, stride=1, padding=1, bias=False)
         self.relu = nn.ReLU(inplace=True)
         self.unpool = torch.nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None)
@@ -360,7 +172,7 @@ class Net_V3(nn.Module):
         x = self.unpool(x)
         a['unpool1'] = x
         # 第8层
-        #x = x + rawDepth
+        x = torch.cat([x, rgb_image], dim=1)
         x = self.conv8(x)
         a['conv4_no_relu'] = x
         x = self.relu(x)
@@ -471,63 +283,163 @@ class Net_V4(nn.Module):
         x = torch.cat([x, d256], dim=1)
         x = self.conv8(x)
         a['conv4_no_relu'] = x
-
+        x = self.relu(x)
+        a['conv4_relu'] = x
 
         return x, a
-class PixTransformNet(nn.Module):
 
+class Net_V5(nn.Module):
+    # 基于 CNN 的彩色图像引导的深度图像
+    # 超分辨率重
     def __init__(self,
                  qn_on: bool,
                  weight_bit: int, output_bit: int,
                  isint: int,
-                 clamp_std: int, noise_scale: float,  channels_in=4, kernel_size=1, weights_regularizer=None, ):
-        super(PixTransformNet, self).__init__()
-        def conv2d(in_channels,out_channels,kernel_size,stride, padding):
+                 clamp_std: int, noise_scale: float
+                 ):
+        super().__init__()
+        def conv2d(in_channels,out_channels,kernel_size,stride,bias):
             return nn.Sequential(
-                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=padding,
+                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=(kernel_size-1)//2,
                                       weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std,
                                       noise_scale=noise_scale,
-                                      bias=False),
+                                      bias=bias),
+                #nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=(kernel_size-1)//2,
+#
+ #                                     bias=bias),
             )
 
-        self.channels_in = channels_in
+        self.conv1c = nn.Sequential(conv2d(in_channels=3, out_channels=64, kernel_size=7, stride=2, bias=False),nn.ReLU())
+        self.conv2c = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=2, stride=2, bias=False),nn.ReLU())
+        self.conv1d = nn.Sequential(conv2d(in_channels=1, out_channels=64, kernel_size=7, stride=2, bias=False),nn.ReLU())
+        self.conv2d = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=2, bias=False),nn.ReLU())
+        self.conv3i = nn.Sequential(conv2d(in_channels=128, out_channels=64, kernel_size=3, stride=1, bias=False),nn.ReLU())
+        self.conv4i = nn.Sequential(conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, bias=False),nn.ReLU())
+        #self.conv_outi = nn.Sequential(conv2d(in_channels=2, out_channels=1, kernel_size=3, stride=1, bias=False),nn.ReLU())
+        self.conv1f = nn.Sequential(conv2d(in_channels=1, out_channels=64, kernel_size=7, stride=1, bias=False),nn.ReLU())
+        #self.conv2f = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False),nn.ReLU())
+        #self.conv3f = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        #self.conv4f = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        #self.conv5f = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.conv6f = nn.Sequential(nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
+                                    conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.conv7f = nn.Sequential(nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
+                                    conv2d(in_channels=64, out_channels=63, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.conv_outf = nn.Sequential(conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.up = nn.Upsample(size=None, scale_factor=4, mode='nearest', align_corners=None)
+        self.down = nn.MaxPool2d(4,4)
+    def forward(self, init_hr_c: Tensor, init_lr_d: Tensor) ->Union[Tensor,tuple]:
 
-        self.spatial_net = nn.Sequential(conv2d(1, 32, 1, stride=1, padding=0),nn.ReLU(),
-                                         conv2d(32, 64, 1, stride=1, padding=0), nn.ReLU(),
-                                         conv2d(64, 128, 1, stride=1, padding=0), nn.ReLU(),
-                                         #conv2d(128, 256,kernel_size, stride=1, padding=(kernel_size - 1) // 2)
-                                         )
-        self.color_net = nn.Sequential(conv2d(channels_in - 1, 32, 1, stride=2, padding=0), nn.ReLU(),  #nn.MaxPool2d(2,2),
-                                       conv2d(32, 64, 1, stride=2, padding=0), nn.ReLU(),  #nn.MaxPool2d(2, 2),
-                                       conv2d(64, 128, 1, stride=2, padding=0), nn.ReLU(),  # nn.MaxPool2d(2, 2),
-                                       #conv2d(128, 256, kernel_size, stride=1, padding=(kernel_size - 1) // 2)
-                                       )
-        self.head_net = nn.Sequential(nn.ReLU(),
-                                      conv2d(256, 128, kernel_size, stride=1, padding=(kernel_size - 1) // 2),nn.ReLU(),nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
-                                      conv2d(128, 64, kernel_size, stride=1, padding=(kernel_size - 1) // 2), nn.ReLU(),nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
-                                      conv2d(64, 32, kernel_size, stride=1, padding=(kernel_size - 1) // 2), nn.ReLU(),nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
-                                      conv2d(32, 1, 1, stride=1, padding=0))
+        a = {}
+        # 第1层
+        a['input_cat_image'] = init_hr_c
+        hr_c = self.conv1c(init_hr_c)
+        a['conv1c'] = hr_c
+        # 第2层CNN
+        hr_c = self.conv2c(hr_c)
+        a['conv2c'] = hr_c
+        # 第1层
+        lr_d = self.conv1d(init_lr_d)
+        a['conv1d'] = lr_d
+        # 第2层
+        lr_d = self.conv2d(lr_d)
+        a['conv2d'] = lr_d
 
-        if weights_regularizer is None:
-            reg_spatial = 0.0001
-            reg_color = 0.001
-            reg_head = 0.0001
-        else:
-            reg_spatial = weights_regularizer[0]
-            reg_color = weights_regularizer[1]
-            reg_head = weights_regularizer[2]
+        hr_i = torch.cat([hr_c, lr_d], dim=1)
+        #print(hr_i.size())
 
-        self.params_with_regularizer = []
-        self.params_with_regularizer += [{'params': self.spatial_net.parameters(), 'weight_decay': reg_spatial}]
-        self.params_with_regularizer += [{'params': self.color_net.parameters(), 'weight_decay': reg_color}]
-        self.params_with_regularizer += [{'params': self.head_net.parameters(), 'weight_decay': reg_head}]
+        # 第3层
+        hr_i = self.conv3i(hr_i)
+        a['conv3i'] = hr_i
+        # 第4层
+        hr_i = self.conv4i(hr_i)
+        a['conv4i'] = hr_i
 
-    def forward(self, input_color, input_spatial):
+        #init_out_i = torch.cat([hr_i, init_lr_d], dim=1)
+        init_out_i = hr_i
+        # 第i层
+        #init_out_i = self.conv_outi(init_out_i)
+        #a['conv_outi'] = init_out_i
 
-        #input_spatial = input[:, self.channels_in - 1:, :, :]
-        #input_color = input[:, 0:self.channels_in - 1, :, :]
-        a = []
-        input_spatial=F.interpolate(input_spatial,scale_factor=1/8)
-        merged_features = torch.cat([self.spatial_net(input_spatial) , self.color_net(input_color)],dim=1)
+        # 第8层
+        out_i = self.conv1f(init_out_i)
+        a['conv1f'] = out_i
+        # 第4层
+        #out_i = self.conv2f(out_i)
+        #a['conv2f'] = out_i
+        #out_i = self.conv3f(out_i)
+        #a['conv3f'] = out_i
+        # 第4层
+        #out_i = self.conv4f(out_i)
+        #a['conv4f'] = out_i
+        #out_i = self.conv5f(out_i)
+        #a['conv5f'] = out_i
+        # 第4层
+        out_i = self.conv6f(out_i)
+        a['conv6f'] = out_i
+        out_i = self.conv7f(out_i)
+        a['conv7f'] = out_i
 
-        return self.head_net(merged_features), a
+        out_f = torch.cat([out_i,init_hr_c[:,0,:,:].unsqueeze(1)], dim=1)
+        # 第4层
+        out_f = self.conv_outf(out_f)
+        a['conv_outf'] = out_f
+        return out_f, a
+
+class Net_V6(nn.Module):
+    # 基于 CNN 的彩色图像引导的深度图像
+    # 超分辨率重
+    def __init__(self,
+                 qn_on: bool,
+                 weight_bit: int, output_bit: int,
+                 isint: int,
+                 clamp_std: int, noise_scale: float
+                 ):
+        super().__init__()
+        def conv2d(in_channels,out_channels,kernel_size,stride,bias):
+            return nn.Sequential(
+                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, stride=stride, padding=(kernel_size-1)//2,
+                                      weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std,
+                                      noise_scale=noise_scale,
+                                      bias=bias),
+            )
+
+        self.conv1 = nn.Sequential(conv2d(in_channels=1, out_channels=64, kernel_size=7, stride=1, bias=False),nn.ReLU())
+        self.conv2 = nn.Sequential(nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None),
+                                    conv2d(in_channels=64, out_channels=61, kernel_size=3, stride=1, bias=False),nn.ReLU())
+
+        self.conv3 = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.conv4 = nn.Sequential(conv2d(in_channels=64, out_channels=64, kernel_size=3, stride=1, bias=False),
+                                   nn.ReLU())
+        self.conv5 = nn.Sequential(conv2d(in_channels=64, out_channels=1, kernel_size=3, stride=1, bias=False), nn.ReLU())
+        self.up = nn.Upsample(size=None, scale_factor=2, mode='nearest', align_corners=None)
+        self.down = nn.MaxPool2d(4,4)
+    def forward(self, init_hr_c: Tensor, init_lr_d: Tensor) ->Union[Tensor,tuple]:
+
+        a = {}
+        # 第1层
+        a['input_cat_image'] = self.down(init_lr_d)
+        lr_d = self.conv1(self.down(init_lr_d))
+        a['conv1c'] = lr_d
+        # 第2层CNN
+        lr_d = self.conv2(lr_d)
+        a['conv2c'] = lr_d
+
+
+        hr_i = torch.cat([init_hr_c, self.up(lr_d)], dim=1)
+        #print(hr_i.size())
+
+        # 第3层
+        hr_i = self.conv3(hr_i)
+        a['conv3i'] = hr_i
+        # 第4层
+        hr_i = self.conv4(hr_i)
+        a['conv4i'] = hr_i
+        hr_i = self.conv4(hr_i)
+        a['conv4i'] = hr_i
+        hr_i = self.conv4(hr_i)
+        a['conv4i'] = hr_i
+
+        out_f = self.conv5(hr_i)
+        a['conv_outf'] = out_f
+        return out_f, a

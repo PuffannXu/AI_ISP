@@ -107,7 +107,7 @@ def main(opt):
 
     model.print_network()
     if SAVE_LOG is True:
-        model.log_network(path_to_log)
+        model.log_network((2,256,256),path_to_log)
     model.set_optimizer(lr)
     # ======================================== #
     # 加载数据

@@ -38,7 +38,7 @@ def main():
 
     test_set = Dataset("/home/project/xupf/Databases/AF_new/ground_truth_train0.txt")
     dataloader = DataLoader(test_set, batch_size=1, shuffle=False, num_workers=20)
-    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/I8W4O8_n0.075/model_V2.pth")
+    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/model/I8W4O8_n0.075_AF_V2.pth")
         #"/home/project/xupf/Projects/AI_ISP/AF/model/model_V2.pth")
     # path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/FULL_fold_0/model.pth")
     model.load(path_to_pretrained)

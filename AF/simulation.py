@@ -11,6 +11,8 @@
 
 import os
 from random import random
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import time
@@ -37,21 +39,24 @@ MAX_FOCUS_TIME = 7 # 最大对焦次数，文献中为7
 NEARNESS_THRESHOLD = 5 # 误差范围内视为成功，文献中为7,5,3,1
 POSITION_ERROR = round(random()*60-30)#20#30 # round(random()*60-30)
 
+NUM_SAMPLES = 20#20
 # ====================================================================================
 # 定义路径
 # ====================================================================================
 
-DATASET = "la_512_train_0to1_top_0.5_0.5"
+DATASET = "la_512_train_0to1_left_0.5_0.3"
 DATANAME = DATASET.strip().split("_")[-3]+"_"+DATASET.strip().split("_")[-2]+"_"+DATASET.strip().split("_")[-1]
 # 权重
-path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/I8W4O8_n0.075/model_V2.pth")
+path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/model/I8W4O8_n0.075_AF_V2.pth")
 
 # 输出结果
 PATH_TO_SAVED = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/test/{}".format(DATASET),
                              "PositionError_{}_{}".format(POSITION_ERROR, str(time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time())))))
 os.makedirs(PATH_TO_SAVED, exist_ok=True)
+PATH_TO_GIF = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/gif/{}".format(DATASET),
+                             "PositionError_{}_{}/".format(POSITION_ERROR, str(time.strftime('%Y%m%d_%H%M%S', time.localtime(time.time())))))
+os.makedirs(PATH_TO_GIF, exist_ok=True)
 # 场景元数据
-#path_to_metadata = "/home/project/xupf/Databases/AF_new/best_of_a_scene.csv"
 path_to_metadata = "/home/project/xupf/Databases/AF_{}/{}.csv".format(DATASET,DATASET)
 # 输入数据
 path_to_data = os.path.join("/home/project/xupf/Databases/AF_{}", "numpy_data").format(DATASET)
@@ -90,6 +95,7 @@ FinalPositionErrorList = []
 MovementsTimesList=[]
 InitialPositionErrorList = []
 for r in range(len(metadata)):
+
     Filename, median_depth, CorrectPosition, min_diff = metadata[r].strip().split(',')
     # 如果是标题行，跳过
     if median_depth == "median_depth":
@@ -101,9 +107,12 @@ for r in range(len(metadata)):
         img = np.array(np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CorrectPosition,DATANAME))),
                        dtype='uint16')
     except FileNotFoundError:
+        print("file not found:", Filename)
         continue
     if median_depth > 450:
         InputNumber += 1
+        if NUM_SAMPLES > -1 and InputNumber > NUM_SAMPLES - 1:
+            break
         # 随机初始化对焦点[0,48]
         #InitialPosition = round(random() * 48)
         #POSITION_ERROR = InitialPosition - CorrectPosition
@@ -115,13 +124,51 @@ for r in range(len(metadata)):
             InitialPosition = 0
         InitialPositionErrorList.append(InitialPosition - CorrectPosition)
         CurrentPosition = InitialPosition
+        # 画出对焦的动图begin
+        if InitialPosition == CorrectPosition:
+            path_to_vis = os.path.join("/home/project/xupf/Databases/AF_{}".format(DATASET), "visual_data",
+                                       Filename + '_' + DATANAME,
+                                       Filename + '_{}_{}_FOCUS.png'.format(DATANAME, InitialPosition))
+        else:
+            path_to_vis = os.path.join("/home/project/xupf/Databases/AF_{}".format(DATASET), "visual_data",
+                                       Filename + '_' + DATANAME,
+                                       Filename + '_{}_{}.png'.format(DATANAME, InitialPosition))
+            path_to_cor = os.path.join("/home/project/xupf/Databases/AF_{}".format(DATASET), "visual_data",
+                                       Filename + '_' + DATANAME,
+                                       Filename + '_{}_{}_FOCUS.png'.format(DATANAME, CorrectPosition))
+        vis = np.array(cv2.imread(path_to_vis), dtype='uint16')
+        cor = np.array(cv2.imread(path_to_cor), dtype='uint16')
+        vis = cv2.cvtColor(vis,cv2.COLOR_BGR2RGB)
+        cor = cv2.cvtColor(cor, cv2.COLOR_BGR2RGB)
+        plt.figure()
+        plt.title(
+            "file:{}, cur_f:{}, gt_f:{}, f_t:{}".format(Filename, InitialPosition, CorrectPosition, "init"))
+        plt.imshow(vis)
+        path_to_gif_dir = os.path.join(PATH_TO_GIF, Filename)
+        os.makedirs(path_to_gif_dir, exist_ok=True)
+        plt.savefig(os.path.join(path_to_gif_dir, "foucs_time_init.png"))
+        plt.show()
+        plt.close()
+        plt.figure()
+        plt.title(
+            "file:{}, gt_f:{}, f_t:{}".format(Filename, CorrectPosition, "cor"))
+        plt.imshow(cor)
+        path_to_gif_dir = os.path.join(PATH_TO_GIF, Filename)
+        os.makedirs(path_to_gif_dir, exist_ok=True)
+        plt.savefig(os.path.join(path_to_gif_dir, "foucs_time_cor.png"))
+        plt.show()
+        # 画出对焦的动图end
         for focus_time in range(MAX_FOCUS_TIME):
             try:
                 img = np.array(
                     np.load(os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CurrentPosition, DATANAME))),
                     dtype='uint16')
             except FileNotFoundError:
-                continue
+                print("file not found:",os.path.join(path_to_data, Filename + '_{}_{}_data.npy'.format(CurrentPosition, DATANAME)))
+                break
+
+
+
 
             label = CorrectPosition - CurrentPosition
             img = cv2.resize(img, dsize=(256,256), fx=0.5, fy=0.5)
@@ -146,6 +193,27 @@ for r in range(len(metadata)):
                 CurrentPosition = 0
             if CurrentPosition > 48:
                 CurrentPosition = 48
+            # 画出对焦的动图begin
+            if CurrentPosition == CorrectPosition:
+                path_to_vis = os.path.join("/home/project/xupf/Databases/AF_{}".format(DATASET), "visual_data",
+                                           Filename + '_' + DATANAME,
+                                           Filename + '_{}_{}_FOCUS.png'.format(DATANAME, CurrentPosition))
+            else:
+                path_to_vis = os.path.join("/home/project/xupf/Databases/AF_{}".format(DATASET), "visual_data",
+                                           Filename + '_' + DATANAME,
+                                           Filename + '_{}_{}.png'.format(DATANAME, CurrentPosition))
+            vis = np.array(cv2.imread(path_to_vis), dtype='uint16')
+            vis = cv2.cvtColor(vis, cv2.COLOR_BGR2RGB)
+            plt.figure()
+            plt.title(
+                "file:{}, cur_f:{}, gt_f:{}, f_t:{}".format(Filename, CurrentPosition, CorrectPosition,
+                                                            focus_time))
+            plt.imshow(vis)
+            path_to_gif_dir = os.path.join(PATH_TO_GIF, Filename)
+            os.makedirs(path_to_gif_dir, exist_ok=True)
+            plt.savefig(os.path.join(path_to_gif_dir, "foucs_time{}.png".format(focus_time)))
+            plt.show()
+
             if abs(loss) < NEARNESS_THRESHOLD:
                 MovementsTimesList.append(focus_time+1)   # 只考虑成功的移动次数
                 FinalPositionErrorList.append(loss)     # 只考虑成功的误差

@@ -294,7 +294,10 @@ class Net_V2(torch.nn.Module):
             #    pred = normalize(torch.sum(torch.sum(rgb * confidence, 2), 2), dim=1)
             #else:
             #    pred = normalize(torch.sum(torch.sum(rgb, 2), 2), dim=1)
-            pred = normalize(torch.sum(torch.sum(rgb * (confidence + 1), 2), 2), dim=1)
+            #pred = normalize(torch.sum(torch.sum(rgb * confidence + 1, 2), 2), dim=1)
+            pred = torch.sum(torch.sum(rgb * confidence + 1, 2), 2)
+            pred = pred[:,1].unsqueeze(1)/pred
+
             return pred, rgb, confidence, a
 
         pred = normalize(torch.sum(torch.sum(out, 2), 2), dim=1)

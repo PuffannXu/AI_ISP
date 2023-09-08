@@ -22,29 +22,29 @@ class Dataset(data.Dataset):
         self.__path_to_rawDepth = os.path.join(basepath, "rawDepths")
 
         metadata = []
-        for filename in os.listdir(self.__path_to_rgb):
+        for filename in os.listdir(self.__path_to_depth):
                 metadata.append(filename)
 
         self.__fold_data = metadata
-        self.rgb_images, self.labels, self.depths, self.rawDepths = self.__load_dataset__()
+        self.rgb_images, self.depths, self.rawDepths, self.filenames = self.__load_dataset__()
 
     def __getitem__(self, index: int) -> Tuple:
         rgb_images = self.rgb_images[index]
-        labels = self.labels[index]
         depths = self.depths[index]
         rawDepths = self.rawDepths[index]
-        return rgb_images, labels, depths, rawDepths
+        filenames = self.filenames[index]
+        return rgb_images, depths, rawDepths, filenames
     def __load_dataset__(self):
         rgb_images = []
-        labels = []
+        file_names = []
         depths = []
         rawDepths = []
         for index in range(len(self.__fold_data)):
             file_name = self.__fold_data[index].strip().split('_')[-1]
             rgb_image = np.array(np.load(os.path.join(self.__path_to_rgb, 'rgb_image_{}'.format(file_name))), dtype='uint8')
-            label = np.array(np.load(os.path.join(self.__path_to_label, 'label_{}'.format(file_name))), dtype='uint8')
-            depth = np.array(np.load(os.path.join(self.__path_to_depth, 'depth_{}'.format(file_name))), dtype='float')
-            rawDepth = np.array(np.load(os.path.join(self.__path_to_rawDepth, 'rawDepth_{}'.format(file_name))), dtype='float')
+            #label = np.array(np.load(os.path.join(self.__path_to_label, 'label_{}'.format(file_name))), dtype='uint8')
+            depth = np.array(np.load(os.path.join(self.__path_to_depth, 'depth_{}'.format(file_name))), dtype='uint8')
+            rawDepth = np.array(np.load(os.path.join(self.__path_to_rawDepth, 'rawDepth_{}'.format(file_name))), dtype='uint8')
             rgb_image = hwc_to_chw(rgb_image)
             if self.rgb_channel == 1:
                 rgb_image = rgb_image[1,:,:]
@@ -61,23 +61,23 @@ class Dataset(data.Dataset):
 
             rgb_image = np.concatenate([rgb_image, x_grid, y_grid], axis=0)
             '''
-            label = label.reshape(1, 256, 256)
-            depth = depth.reshape(1, 256, 256)
+            #label = label.reshape(1, 256, 256)
+            depth = depth[:,:,0].reshape(1, 256, 256)
 
-            rawDepth = rawDepth.reshape(1, 256, 256)
+            rawDepth = rawDepth[:,:,0].reshape(1, 256, 256)
             rgb_images.append(rgb_image)
-            labels.append(label)
+            #labels.append(label)
             depths.append(depth)
             rawDepths.append(rawDepth)
-        labels = labels / np.max(labels)
+            file_names.append(file_name)
+        #labels = labels / np.max(labels)
         rgb_images = rgb_images / np.max(rgb_images)
         depths = depths /np.max(depths)
         rawDepths = rawDepths/np.max(rawDepths)
         print("rgb max=",np.amax(rgb_images))
-        print("label max=", np.amax(labels))
         print("depths max=", np.amax(depths))
         print("rawDepths max=", np.amax(rawDepths))
-        return rgb_images, labels, depths, rawDepths
+        return rgb_images, depths, rawDepths, file_names
 
     def __len__(self) -> int:
         return len(self.__fold_data)

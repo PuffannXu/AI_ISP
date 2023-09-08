@@ -19,10 +19,10 @@ from RRAM import my_utils as my
 # 训练参数
 # ======================================== #
 RANDOM_SEED = 0
-EPOCHS = 30
-BATCH_SIZE = 2
+EPOCHS = 51
+BATCH_SIZE = 8
 LEARNING_RATE = 0.0001
-FOLD_NUM = 2
+FOLD_NUM = 0
 
 RELOAD_CHECKPOINT = True
 # ======================================== #
@@ -39,7 +39,7 @@ noise_scale = 0.075
 
 if qn_on:
     model_name = "I{}W{}O{}_n{}".format(str(input_bit),str(weight_bit),str(output_bit),noise_scale)
-    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_1/model.pth")
+    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
 else:
     model_name = "FULL"
     PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/FULL_fold_0")
@@ -102,7 +102,7 @@ def main(opt):
         model.load(PATH_TO_PTH_CHECKPOINT)
 
     model.print_network()
-    model.log_network(path_to_log)
+    model.log_network((3,256,256),path_to_log)
     model.set_optimizer(lr)
     # ======================================== #
     # 加载数据
@@ -139,6 +139,7 @@ def main(opt):
         start = time.time()
 
         for i, (img, label, file_name) in enumerate(training_loader):
+            label = label[:,1].unsqueeze(1) / label
             img, label = img.to(DEVICE), label.to(DEVICE)
             # quant
             if img_quant_flag == 1:
@@ -165,6 +166,7 @@ def main(opt):
             plt_valid_loss.append(val_loss.avg)
             with torch.no_grad():
                 for i, (img, label, file_name) in enumerate(test_loader):
+                    label = label[:,1].unsqueeze(1)/label
                     img, label = img.to(DEVICE), label.to(DEVICE)
                     # quant
                     if img_quant_flag == 1:
@@ -226,7 +228,7 @@ def main(opt):
             best_val_loss = val_loss.avg
             best_metrics = evaluator.update_best_metrics()
             print("Saving new best model... \n")
-            model.save(path_to_log)
+            model.save(path_to_log, "model_V{}.pth".format("Alex"))
 
         log_metrics(train_loss.avg, val_loss.avg, metrics, best_metrics, path_to_metrics_log)
     plt.figure()
