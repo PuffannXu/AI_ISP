@@ -63,7 +63,7 @@ class Net_V1(Network):
                                       bias=bias),
             )
 
-        self.conv1 = conv2d(in_channels=2,   out_channels=8,   kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = conv2d(in_channels=1,   out_channels=8,   kernel_size=5, stride=2, padding=2, bias=False)
         self.relu1 = nn.ReLU(inplace=True)
         self.conv2 = conv2d(in_channels=8,   out_channels=32,  kernel_size=3, stride=2, padding=1, bias=False)
         self.relu2 = nn.ReLU(inplace=True)
@@ -155,7 +155,7 @@ class Net_V2(Network):
                 my.Linear_quant_noise(qn_on=qn_on, in_features=in_channels, out_features=out_channels, weight_bit=weight_bit, output_bit=output_bit, isint=isint,
                                       clamp_std=clamp_std, noise_scale=noise_scale, bias=bias),
             )
-        self.conv1 = conv2d(in_channels=2, out_channels=32, kernel_size=5, stride=2, padding=2, bias=False)
+        self.conv1 = conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=2, padding=2, bias=False)
         self.conv2 = conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1, bias=False)
         self.conv3 = conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1, bias=False)
         self.conv4 = conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1, bias=False)

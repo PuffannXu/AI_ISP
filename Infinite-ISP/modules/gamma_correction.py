@@ -26,7 +26,8 @@ class GammaCorrection:
         lut = np.uint8(np.array(self.parm_gmm['gammaLut']))
         
         #apply LUT
-        gamma_img = lut[self.img]
+        #gamma_img = lut[self.img]
+        gamma_img = np.uint16(self.img ** (1/2.2))
         return gamma_img
 
     def execute(self):

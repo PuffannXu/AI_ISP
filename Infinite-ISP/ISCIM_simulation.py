@@ -4,21 +4,22 @@
 # Author: xx-isp (ispinfinite@gmail.com)
 #------------------------------------------------------------
 import os
+import math
 import scipy
 from matplotlib import pyplot as plt
 import numpy as np
 import yaml
 import rawpy
+from pathlib import Path
 from modules.dead_pixel_correction import DeadPixelCorrection as DPC
 from modules.lens_shading_correction import LensShadingCorrection as LSC
 from modules.auto_white_balance import AutoWhiteBalance as AWB
 from modules.demosaic import CFAInterpolation as CFA_I
 from modules.ai_awb import ai_awb
 
-#not to jumble any tags
+
 yaml.preserve_quotes = True
-#config_path = './config/NUS8_configs.yml'
-config_path = './config/SonyA57_configs.yml'
+config_path = './config/CANON1D2_configs.yml'
 with open(config_path, 'r') as f:
     c_yaml = yaml.safe_load(f)
 
@@ -46,89 +47,78 @@ parm_lsc = c_yaml['lens_shading_correction']
 parm_wbc = c_yaml['white_balance']
 parm_awb = c_yaml['auto_white_balance']
 
+wb = [1,1,1]
+for filename in os.listdir(raw_folder):
 
-print(50*'-' + '\nLoading metadata......\n')
-path_to_meta_data = '/home/project/xupf/Databases/NUS8/SonyA57_RAW/SonyA57_gt.mat'
-#path_to_meta_data = '/home/project/xupf/Databases/NUS8/NikonD40_RAW/NikonD40_gt.mat'
-
-meta_data = []
-ground_truth = scipy.io.loadmat(path_to_meta_data)
-illums = ground_truth['groundtruth_illuminants']
-illums /= np.linalg.norm(illums, axis=1)[..., np.newaxis]
-filenames = ground_truth['all_image_names']
-filnames_array = np.empty((),dtype='<U12')
-illums_array = np.empty((3),dtype='float16')
-for i in range(len(filenames)):
-    filnames_array = np.vstack((filnames_array, np.array(str(filenames[i,0]).strip("[]'"))))
-    illums_array = np.vstack((illums_array, np.array(illums[i])))
-filnames_array = filnames_array[1:,:]
-illums_array = illums_array[1:,:]
-for i in range(len(filnames_array)):
-    fn = filnames_array[i,:]
-    ill = illums_array[i,:]
-    raw_path = os.path.join(raw_folder,str(fn[0])+".ARW")
+    raw_path = os.path.join(raw_folder,str(filename))
     img = rawpy.imread(raw_path)
-    raw = img.raw_image
+    raw = img.raw_image_visible
 
     print(50*'-' + '\nLoading RAW Image Done......\n')
 
-    plt.subplot(2,3,1)
-    plt.imshow(raw/raw.max(), cmap='gray')
+    plt.subplot(3,3,1)
+    plt.imshow(raw/sensor_range, cmap='gray')
     plt.title("raw")
     #plt.show()
 
+    # -------------------------------------------------------
+    # raw signal processing start
+    # -------------------------------------------------------
 
+    # -------------blc-----------
     blc_raw = np.empty(raw.shape, dtype=np.uint16)
-    blc_raw[0::2, 0::2] = raw[0::2, 0::2] - r_offset
-    blc_raw[0::2, 1::2] = raw[0::2, 1::2] - gr_offset
-    blc_raw[1::2, 0::2] = raw[1::2, 0::2] - gb_offset
-    blc_raw[1::2, 1::2] = raw[1::2, 1::2] - b_offset
-    blc_raw = np.uint16(np.clip(blc_raw, 0, sensor_range))
+    raw = np.float32(raw)
+    #r_offset, gr_offset, gb_offset, b_offset = img.black_level_per_channel
+    #r_sat, gr_sat, gb_sat, b_sat = img.camera_white_level_per_channel
+    blc_raw[0::2, 0::2] = np.clip(raw[0::2, 0::2] - r_offset, 0, r_sat)
+    blc_raw[0::2, 1::2] = np.clip(raw[0::2, 1::2] - gr_offset, 0, gr_sat)
+    blc_raw[1::2, 0::2] = np.clip(raw[1::2, 0::2] - gb_offset, 0, gb_sat)
+    blc_raw[1::2, 1::2] = np.clip(raw[1::2, 1::2] - b_offset, 0, b_sat)
+    blc_raw = np.uint16(blc_raw)
 
-    plt.subplot(2, 3, 2)
-    plt.imshow(blc_raw/blc_raw.max(), cmap='gray')
+    plt.subplot(3, 3, 2)
+    plt.imshow(blc_raw/sensor_range, cmap='gray')
     plt.title("blc_raw")
     #plt.show()
 
-    #  Dead pixels correction
+    # -------------dpc-----------
     dpc = DPC(blc_raw, sensor_info, parm_dpc, platform)
     dpc_raw = dpc.execute()
 
+    # -------------lsc-----------
+    rGain = np.load('/home/project/xupf/Projects/AI_ISP/Infinite-ISP/config/rGain_A95I4988.mat.npy')
+    grGain = np.load('/home/project/xupf/Projects/AI_ISP/Infinite-ISP/config/grGain_A95I4988.mat.npy')
+    gbGain = np.load('/home/project/xupf/Projects/AI_ISP/Infinite-ISP/config/gbGain_A95I4988.mat.npy')
+    bGain = np.load('/home/project/xupf/Projects/AI_ISP/Infinite-ISP/config/bGain_A95I4988.mat.npy')
 
-    # 6 Lens shading correction
-    #lsc = LSC(blc_raw, sensor_info, parm_lsc)
-    #lsc_raw = lsc.execute()
+    lsc = LSC(blc_raw, sensor_info, parm_lsc, rGain, grGain, gbGain, bGain)
+    lsc_raw = lsc.mesh_shading_correction()
 
-    lsc_raw = dpc_raw
-
-    # 9 CFA demosaicing
-    #demos_img =np.stack(wb_raw[::2, ::2], (wb_raw[::2, 1::2] + wb_raw[1::2, ::2])/2.0,wb_raw[1::2, 1::2])
+    # --------demosaic-----------
     cfa_inter = CFA_I(lsc_raw, sensor_info)
     demos_img = cfa_inter.execute()
 
-    plt.subplot(2, 3, 3)
+    plt.subplot(3, 3, 3)
+    plt.imshow(demos_img/sensor_range)
+    plt.title("demos_img")
 
     if bayer=='bggr':
         b=demos_img[:,:,0]
         g=demos_img[:,:,1]
         r=demos_img[:,:,2]
         demos_img = np.stack((r,g,b),axis=2)
-    plt.imshow(demos_img / demos_img.max())
-    plt.title("demos_img")
     #plt.show()
 
 
-    # 8 White balancing
-    #wb = np.array(img.camera_whitebalance[:3], np.float32)
-    #wb = wb / wb[1]
-    wb = 1/ill
+    # --------wb gain-----------
+    demos_img = np.float32(demos_img)
     wb_raw = np.uint16(np.minimum(demos_img * wb, sensor_range))
     print()
     print("rGain = ", wb[0])
     print("gGain = ", wb[1])
     print("bGain = ", wb[2])
-    plt.subplot(2, 3, 4)
-    plt.imshow((wb_raw/wb_raw.max())**(1/2.2))
+    plt.subplot(3, 3, 4)
+    plt.imshow(wb_raw/sensor_range)
     plt.title("wb_gt\n{:.3f},{:.3f},{:.3f}".format(wb[0],wb[1],wb[2]))
     #plt.show()
 
@@ -136,39 +126,45 @@ for i in range(len(filnames_array)):
     awb = AWB(demos_img, sensor_info, parm_wbc, parm_awb)
     awb_img, wb = awb.execute()
 
-    plt.subplot(2, 3, 5)
-    plt.imshow((awb_img/awb_img.max())**(1/2.2))
+    plt.subplot(3, 3, 5)
+    plt.imshow(awb_img/awb_img.max())
     plt.title("awb_img\n{:.3f},{:.3f},{:.3f}".format(wb[0],wb[1],wb[2]))
     #plt.show()
-
-    # Auto White Balance
+    #  --------ai af-----------
     ai_awb_img, wb = ai_awb(demos_img, sensor_info)
 
-    plt.subplot(2, 3, 6)
-    plt.imshow((ai_awb_img/ai_awb_img.max())**(1/2.2))
+    plt.subplot(3, 3, 6)
+    plt.imshow(ai_awb_img / ai_awb_img.max())
+    plt.title("ai_awb_img\n{:.3f},{:.3f},{:.3f}".format(wb[0], wb[1], wb[2]))
+
+    #  --------ai awb-----------
+    ai_awb_img, wb = ai_awb(demos_img, sensor_info)
+
+    plt.subplot(3, 3, 6)
+    plt.imshow(ai_awb_img/ai_awb_img.max())
     plt.title("ai_awb_img\n{:.3f},{:.3f},{:.3f}".format(wb[0],wb[1],wb[2]))
-    #plt.show()
-    # Auto White Balance
-    #gamma_gt = wb_raw**(1/2.2)
 
-    #plt.subplot(3, 3, 7)
-    #plt.imshow(gamma_gt / gamma_gt.max())
-    #plt.title("gamma_gt")
-    #plt.show()
-    #gamma_awb = awb_img ** (1 / 2.2)
+    # -------
+    gamma_gt = wb_raw**(1/2.2)
 
-    #plt.subplot(3, 3, 8)
-    #plt.imshow(gamma_awb / gamma_awb.max())
-    #plt.title("gamma_awb")
-    #plt.show()
-    #gamma_ai_awb = ai_awb_img ** (1 / 2.2)
+    plt.subplot(3, 3, 7)
+    plt.imshow(gamma_gt / gamma_gt.max())
+    plt.title("gamma_gt")
 
-    #plt.subplot(3, 3, 9)
-    #plt.imshow(gamma_ai_awb / gamma_ai_awb.max())
-    #plt.title("gamma_ai_awb")
+    gamma_awb = awb_img ** (1 / 2.2)
 
-    plt.suptitle(fn)
+    plt.subplot(3, 3, 8)
+    plt.imshow(gamma_awb / gamma_awb.max())
+    plt.title("gamma_awb")
+
+    gamma_ai_awb = ai_awb_img ** (1 / 2.2)
+
+    plt.subplot(3, 3, 9)
+    plt.imshow(gamma_ai_awb / gamma_ai_awb.max())
+    plt.title("gamma_ai_awb")
+
+    plt.suptitle(filename)
     plt.show()
-   # plt.savefig("/home/project/xupf/Projects/AI_ISP/Infinite-ISP/out_frames/{}.png".format(fn))
+    plt.savefig("/home/project/xupf/Projects/AI_ISP/Infinite-ISP/out_frames/{}.png".format(filename))
 
 

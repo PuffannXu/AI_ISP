@@ -171,7 +171,9 @@ for r in range(len(metadata)):
 
 
             label = CorrectPosition - CurrentPosition
-            img = cv2.resize(img, dsize=(256,256), fx=0.5, fy=0.5)
+            img = cv2.resize(img, dsize=(256,256), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)
+            scaled_img256 = cv2.resize(img, dsize=(64, 64), interpolation=cv2.INTER_NEAREST)
+            scaled_img256 = cv2.resize(scaled_img256, dsize=(256, 256), interpolation=cv2.INTER_NEAREST)
             img = hwc_to_chw(scale(img))
             img = torch.from_numpy(img.copy())
             img = img.unsqueeze(0)

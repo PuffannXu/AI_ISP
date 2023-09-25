@@ -28,14 +28,14 @@ class DeadPixelCorrection:
     def apply_dead_pixel_correction(self):
         """This function detects and corrects Dead pixels."""
 
-        height, width = self.sensor_info["height"], self.sensor_info["width"]
-        self.bpp = self.sensor_info["bitdep"]
-        self.threshold = self.parm_dpc["dp_threshold"]
+        height, width = self.img.shape[0],self.img.shape[1]
+        self.bpp = int(self.sensor_info["bitdep"])
+        self.threshold = int(self.parm_dpc["dp_threshold"])
         self.is_debug = self.parm_dpc["isDebug"]
 
         # Mirror padding is applied to self.img.
-        img_padded = np.float32(self.padding())
-        dpc_img = np.empty((height, width), np.float32)
+        img_padded = np.float16(self.padding())
+        dpc_img = np.empty((height, width), np.float16)
         corrected_pv_count = 0
 
         # Loop over the padded image to ensure that each pixel is tested.
@@ -70,19 +70,14 @@ class DeadPixelCorrection:
                     # element-wise comparison of numpy arrays
                     if np.all(diff_with_center_pixel > thresh):
                         corrected_pv_count+=1 
-
+                        '''
                         # Compute gradients
-                        vertical_grad = abs(
-                            2 * center_pixel - top_mid - bottom_mid)
-                        horizontal_grad = abs(
-                            2 * center_pixel - left_of_center_pixel - right_of_center_pixel)
-                        left_diagonal_grad = abs(
-                            2 * center_pixel - top_left - bottom_left)
-                        right_diagonal_grad = abs(
-                            2 * center_pixel - top_right - bottom_right)
+                        vertical_grad = abs(2 * center_pixel - top_mid - bottom_mid)
+                        horizontal_grad = abs(2 * center_pixel - left_of_center_pixel - right_of_center_pixel)
+                        left_diagonal_grad = abs(2 * center_pixel - top_left - bottom_left)
+                        right_diagonal_grad = abs(2 * center_pixel - top_right - bottom_right)
 
-                        min_grad = min(vertical_grad, horizontal_grad,
-                                       left_diagonal_grad, right_diagonal_grad)
+                        min_grad = min(vertical_grad, horizontal_grad,left_diagonal_grad, right_diagonal_grad)
 
                         # Correct value is computed using neighbors in the direction of minimum gradient.
                         if (min_grad == vertical_grad):
@@ -94,7 +89,8 @@ class DeadPixelCorrection:
                             center_pixel = (top_left + bottom_left) / 2
                         else:
                             center_pixel = (top_right + bottom_right) / 2
-
+                        '''
+                        center_pixel = (left_of_center_pixel + right_of_center_pixel) / 2
                 # Corrected pixels are placed in non-padded image.
                 dpc_img[y, x] = center_pixel
         self.img = np.uint16(np.clip(dpc_img, 0, (2**self.bpp)-1))

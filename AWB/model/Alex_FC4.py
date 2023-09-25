@@ -284,19 +284,15 @@ class Net_V2(torch.nn.Module):
 
         # Confidence-weighted pooling: "out" is a set of semi-dense feature maps
         if USE_CONFIDENCE_WEIGHTED_POOLING:
-            # Per-patch color estimates (first 3 dimensions)
-            rgb = normalize(out[:, :3, :, :], dim=1)
+            # Per-patch color estimates (last 3 dimensions)
+            rgb = normalize(out[:, 1:3, :, :], dim=1)
 
-            # Confidence (last dimension)
-            confidence = out[:, 3:4, :, :]
-            #if torch.sum(confidence):
-                # Confidence-weighted pooling
-            #    pred = normalize(torch.sum(torch.sum(rgb * confidence, 2), 2), dim=1)
-            #else:
-            #    pred = normalize(torch.sum(torch.sum(rgb, 2), 2), dim=1)
-            #pred = normalize(torch.sum(torch.sum(rgb * confidence + 1, 2), 2), dim=1)
+            # Confidence (first dimension)
+            confidence = out[:, 0:1, :, :]
+
+            #pred = 1/normalize(torch.sum(torch.sum(rgb * confidence + 1, 2), 2),p=1, dim=1)
             pred = torch.sum(torch.sum(rgb * confidence + 1, 2), 2)
-            pred = pred[:,1].unsqueeze(1)/pred
+
 
             return pred, rgb, confidence, a
 

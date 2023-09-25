@@ -11,11 +11,11 @@ from scipy.signal import correlate2d
 class CFAInterpolation:
     'CFA Interpolation'
 
-    def __init__(self, img, sensor_info, parm_dem):
+    def __init__(self, img, sensor_info):
         self.img = img
-        #self.enable = parm_dem['isEnable']
         self.bayer = sensor_info['bayer_pattern']
-        self.bitdepth = sensor_info['bitdep']
+        self.bitdepth = int(sensor_info['bitdep'])
+        self.sensor_range = int(sensor_info['sensor_range'])
 
     def masks_CFA_Bayer(self):
         # ----generating masks for the given bayer pattern-----
@@ -39,9 +39,9 @@ class CFAInterpolation:
         # ----demosaicing the given raw image-----
 
         # 3D masks accoridng to the given bayer
-        mask_r, mask_g, mask_b = self.masks_CFA_Bayer()  
+        mask_r, mask_g, mask_b = self.masks_CFA_Bayer()
+
         raw_in = np.float32(self.img)
-        
         # Declaring 3D Demosaiced image
         demos_out = np.empty((raw_in.shape[0], raw_in.shape[1], 3))
 
@@ -130,10 +130,23 @@ class CFAInterpolation:
         demos_out = np.uint8(demos_out*255)
         return demos_out
 
+    def cfa_new(self):
+
+        raw = np.float32(self.img)
+        height, width = self.img.shape
+        height = int(height/2)
+        width = int(width/2)
+        demosaic_out = np.empty([height,width,3])
+        demosaic_out[0:height, 0:width, 0] = raw[::2, ::2]
+        demosaic_out[0:height, 0:width, 1] = raw[::2, 1::2]/2+raw[1::2, 0::2]/2
+        demosaic_out[0:height, 0:width, 2] = raw[1::2, 1::2]
+
+        demosaic_out = np.uint16(np.clip(demosaic_out, 0, self.sensor_range))
+        return demosaic_out
     def execute(self):
         print('CFA interpolation (default) = True')
 
         # if self.enable == False:
         #     return self.img
         # elif self.enable == True:
-        return self.apply_cfa()
+        return self.cfa_new()

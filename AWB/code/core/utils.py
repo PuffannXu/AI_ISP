@@ -145,3 +145,34 @@ def cal_ig(img):
             tmp += ds
     ig = tmp / rows / cols
     return ig
+
+
+def resize(img, new_size):
+    if img.ndim == 3:
+        old_height, old_width, channel = img.shape[0], img.shape[1], img.shape[2]
+        new_height, new_width = new_size[0], new_size[1]
+        scale_height, scale_width = new_height / old_height, new_width / old_width
+
+        scaled_img = np.zeros((new_height, new_width, channel), dtype="uint16")
+        for z in range(channel):
+            for y in range(new_height):
+                for x in range(new_width):
+                    y_nearest = int(np.round(y / scale_height))
+                    x_nearest = int(np.round(x / scale_width))
+                    scaled_img[y, x, z] = img[y_nearest, x_nearest,z]
+    else:
+        old_height, old_width = img.shape[0], img.shape[1]
+        new_height, new_width = new_size[0], new_size[1]
+        scale_height, scale_width = new_height / old_height, new_width / old_width
+
+        scaled_img = np.zeros((new_height, new_width), dtype="uint16")
+        idex_y = np.zeros((new_height, new_width), dtype="uint16")
+        idex_x = np.zeros((new_height, new_width), dtype="uint16")
+        for y in range(new_height):
+            for x in range(new_width):
+                y_nearest = int(np.round(y / scale_height))
+                x_nearest = int(np.round(x / scale_width))
+                scaled_img[y, x] = img[y_nearest, x_nearest]
+                idex_x[y, x] = x_nearest
+                idex_y[y, x] = y_nearest
+    return scaled_img

@@ -1,0 +1,42 @@
+platform:
+  folder: /home/project/xupf/Databases/NUS8/SonyA57_RAW/RAW
+  filename: SonyA57_0001.ARW
+  disable_progress_bar: false
+  leave_pbar_string: false
+sensor_info:
+  bayer_pattern: rggb
+  sensor_range: '15871'
+  bitdep: '14'
+  width: '4928'
+  height: '3276'
+crop:
+  isEnable: false
+  isDebug: false
+  new_width: 256
+  new_height: 256
+dead_pixel_correction:
+  isEnable: false
+  dp_threshold: 80
+  isDebug: true
+black_level_correction:
+  isEnable: true
+  r_offset: '512'
+  gr_offset: '512'
+  gb_offset: '512'
+  b_offset: '512'
+  isLinear: false
+  r_sat: '15360'
+  gr_sat: '15360'
+  gb_sat: '15360'
+  b_sat: '15360'
+lens_shading_correction:
+  isEnable: false
+white_balance:
+  isEnable: true
+  isAuto: true
+demosaic:
+  isEnable: true
+auto_white_balance:
+  isDebug: true
+  algorithm: norm_2
+  percentage: 3.5

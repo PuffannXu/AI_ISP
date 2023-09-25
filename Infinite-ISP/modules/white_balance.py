@@ -19,26 +19,38 @@ class WhiteBalance:
     def apply_wb_parameters(self):
 
         #get config params
-        redgain = self.parm_wbc['r_gain']
-        bluegain = self.parm_wbc['b_gain']
+        redgain = 1/self.parm_wbc['r_gain']
+        bluegain = 1/self.parm_wbc['b_gain']
+        greengain = 1/self.parm_wbc['g_gain']
         self.bayer = self.sensor_info['bayer_pattern']
         self.bpp = self.sensor_info['bitdep']
         self.raw = np.float32(self.img)
+        print('   - AWB - RGain = ', redgain)
+        print('   - AWB - Ggain = ', greengain)
+        print('   - AWB - Bgain = ', bluegain)
 
         if self.bayer == 'rggb':
             self.raw[::2, ::2] = self.raw[::2, ::2] * redgain
             self.raw[1::2, 1::2] = self.raw[1::2, 1::2] * bluegain
+            self.raw[1::2, ::2] = self.raw[1::2, ::2] * greengain
+            self.raw[::2, 1::2] = self.raw[::2, 1::2] * greengain
         elif self.bayer == 'bggr':
             self.raw[::2, ::2] = self.raw[::2, ::2] * bluegain
             self.raw[1::2, 1::2] = self.raw[1::2, 1::2] * redgain
+            self.raw[1::2, ::2] = self.raw[::2, ::2] * greengain
+            self.raw[::2, 1::2] = self.raw[1::2, 1::2] * greengain
         elif self.bayer == 'grbg':
             self.raw[1::2, ::2] = self.raw[1::2, ::2] * bluegain
             self.raw[::2, 1::2] = self.raw[::2, 1::2] * redgain
+            self.raw[::2, ::2] = self.raw[::2, ::2] * greengain
+            self.raw[1::2, 1::2] = self.raw[1::2, 1::2] * greengain
         elif self.bayer == 'gbrg':
             self.raw[1::2, ::2] = self.raw[1::2, ::2] * redgain
             self.raw[::2, 1::2] = self.raw[::2, 1::2] * bluegain
+            self.raw[::2, ::2] = self.raw[::2, ::2] * greengain
+            self.raw[1::2, 1::2] = self.raw[1::2, 1::2] * greengain
 
-        raw_whitebal = np.uint16(np.clip(self.raw, 0, (2**self.bpp)-1))
+        raw_whitebal = np.uint16(np.clip(self.raw, 0, self.sensor_info[sensor_range]))
 
         return raw_whitebal
 

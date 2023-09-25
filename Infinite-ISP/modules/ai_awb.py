@@ -4,13 +4,13 @@ import numpy as np
 from torchvision.transforms import transforms
 import torch
 from AWB.code.core.settings import DEVICE
-from AWB.code.core.utils import correct, scale, hwc_to_chw, bgr_to_rgb, normalize
+from AWB.code.core.utils import correct, scale, hwc_to_chw, resize, normalize
 from AWB.code.core.Evaluator import Evaluator
 from AWB.code.ColorCheckerDataset import ColorCheckerDataset
 from AWB.model.Alex_FC4 import Model
 from RRAM import my_utils as my
 
-def ai_awb(ori_img):
+def ai_awb(ori_img, sensor_info):
 
     # ======================================== #
     # 量化训练参数
@@ -24,14 +24,15 @@ def ai_awb(ori_img):
     clamp_std = 0
     noise_scale = 0.075
     # Where to save the generated visualizations
-    #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
-    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
+    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
+    #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
     model = Model(qn_on, weight_bit, output_bit, isint, clamp_std, noise_scale)
     model.load(path_to_pretrained)
     model.evaluation_mode()
     #ori_img = bayer_img
+    img = resize(ori_img, (256, 256))
+    img = hwc_to_chw(scale(img))
 
-    img = hwc_to_chw(scale(ori_img))
     img = torch.from_numpy(img.copy())
     img = img.unsqueeze(0)
 
@@ -55,9 +56,9 @@ def ai_awb(ori_img):
     print("rGain = ", rGain)
     print("gGain = ", gGain)
     print("bGain = ", bGain)
-    cor_img = np.empty(ori_img.shape, np.float32)
+    cor_img = np.empty(ori_img.shape, np.float16)
     cor_img[:,:,0] = ori_img[:,:,0] * rGain
     cor_img[:, :, 1] = ori_img[:, :, 1] * gGain
     cor_img[:, :, 2] = ori_img[:, :, 2] * bGain
 
-    return np.uint8(np.clip(cor_img, 0, 255))
+    return np.uint16(np.clip(cor_img, 0, int(sensor_info['sensor_range']))), pred

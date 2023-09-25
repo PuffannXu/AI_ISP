@@ -6,9 +6,10 @@ import torch
 import torch.utils.data as data
 from matplotlib import pyplot as plt
 import time
-from AWB.code.core.utils import normalize, bgr_to_rgb, linear_to_nonlinear, hwc_to_chw
+from core.utils import normalize, bgr_to_rgb, linear_to_nonlinear, hwc_to_chw, resize
 from core.DataAugmenter import DataAugmenter
 
+import cv2
 save_data = False
 class ColorCheckerDataset(data.Dataset):
 
@@ -32,21 +33,18 @@ class ColorCheckerDataset(data.Dataset):
 
     def __getitem__(self, index: int) -> Tuple:
         file_name = self.__fold_data[index].strip().split(' ')[1]
-        img = np.array(np.load(os.path.join(self.__path_to_data, file_name + '.npy')), dtype='uint16')
+        img = np.array(np.load(os.path.join(self.__path_to_data, file_name + '.npy')), dtype='float32')
         illuminant = np.array(np.load(os.path.join(self.__path_to_label, file_name + '.npy')), dtype='float32')
 
         unaugment_linear_bgr_image = torch.from_numpy(normalize(img).copy())
-        if self.__train:
-            #img, illuminant = self.__da.augment(img, illuminant)
-            img = self.__da.crop(img)
-        else:
-            img = self.__da.crop(img)
+        img = cv2.resize(img, dsize=(256,256), interpolation=cv2.INTER_NEAREST)
+        #img = resize(img, (256, 256))
 
         cropped_linear_bgr_image = torch.from_numpy(normalize(img).copy())
         cropped_linear_rgb_image = torch.from_numpy(bgr_to_rgb(normalize(img)).copy())
         cropped_nonlinear_rgb_image = torch.from_numpy(linear_to_nonlinear(bgr_to_rgb(normalize(img))).copy())
-        #img = hwc_to_chw(linear_to_nonlinear(bgr_to_rgb(normalize(img))))
-        img = hwc_to_chw((bgr_to_rgb(normalize(img))))
+        #img = hwc_to_chw((bgr_to_rgb(normalize(img))))
+        img = hwc_to_chw((bgr_to_rgb(img)))
         if save_data:
             path_to_save = os.path.join(self.__path_to_save, "fold_{}".format(0), file_name)
             os.makedirs(path_to_save, exist_ok=True)
@@ -62,7 +60,6 @@ class ColorCheckerDataset(data.Dataset):
             fig.suptitle("Image ID: {} | gt: {}".format(file_name, illuminant))
             fig.show()
             fig.savefig(os.path.join(path_to_save, "pre_img.png"), dpi=200)
-        #hwc_to_chw(linear_to_nonlinear(bgr_to_rgb(normalize(img))))
 
         img = torch.from_numpy(img.copy())
         illuminant = torch.from_numpy(illuminant.copy())

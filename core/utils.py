@@ -86,6 +86,22 @@ def cal_la(img):
     return imageVar
 
 
+def resize(img, new_size):
+
+    old_height, old_width = img.shape[0], img.shape[1]
+    new_height, new_width = new_size[0], new_size[1]
+    scale_height, scale_width = new_height / old_height, new_width / old_width
+
+    scaled_img = np.zeros((new_height, new_width), dtype="uint16")
+
+    for y in range(new_height):
+        for x in range(new_width):
+            y_nearest = int(np.floor(y / scale_height))
+            x_nearest = int(np.floor(x / scale_width))
+            scaled_img[y, x] = img[y_nearest, x_nearest]
+    return scaled_img
+
+
 def crop(img, pos_x, pos_y, roi_size):
     # pos_x是x方向上的比例
     # pos_y是y方向上的比例

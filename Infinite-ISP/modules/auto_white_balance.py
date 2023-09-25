@@ -81,7 +81,7 @@ class AutoWhiteBalance:
     def apply_white_balance_gain(self):
         
         # Removed overexposed and underexposed pixels for wb gain calculation
-        x = np.sum(np.where((self.img<15)|(self.img>240), 1, 0), axis=2)
+        x = np.sum(np.where((self.img<1)|(self.img>100000), 1, 0), axis=2)
         self.flatten_img = self.img[x==0]
 
         # estimated illuminant RBG is obtained from selected algorithm
@@ -110,7 +110,7 @@ class AutoWhiteBalance:
             print('   - AWB - RGain = ', rgain)
             print('   - AWB - Bgain = ', bgain)
 
-        return np.uint8(np.clip(self.img, 0, 255))
+        return np.uint16(np.clip(self.img, 0, int(self.sensor_info['sensor_range']))), (rgain,1,bgain)
 
 
     def execute(self):
@@ -118,6 +118,7 @@ class AutoWhiteBalance:
 
         # This module is enabled only when white balance 'enable' and 'auto' parameter both are true.
         if self.enable and self.auto:
-            return self.apply_white_balance_gain()
+            img, wb = self.apply_white_balance_gain()
+            return img, wb
         
         return self.img
