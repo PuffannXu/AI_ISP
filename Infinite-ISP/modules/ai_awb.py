@@ -1,12 +1,9 @@
 import os
 
 import numpy as np
-from torchvision.transforms import transforms
 import torch
 from AWB.code.core.settings import DEVICE
 from AWB.code.core.utils import correct, scale, hwc_to_chw, resize, normalize
-from AWB.code.core.Evaluator import Evaluator
-from AWB.code.ColorCheckerDataset import ColorCheckerDataset
 from AWB.model.Alex_FC4 import Model
 from RRAM import my_utils as my
 
@@ -24,8 +21,8 @@ def ai_awb(ori_img, sensor_info):
     clamp_std = 0
     noise_scale = 0.075
     # Where to save the generated visualizations
-    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
-    #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
+    #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
+    path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
     model = Model(qn_on, weight_bit, output_bit, isint, clamp_std, noise_scale)
     model.load(path_to_pretrained)
     model.evaluation_mode()

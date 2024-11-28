@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import time
-from AF.code.core.utils import scale,hwc_to_chw
+from AF.code.core.af_utils import scale,hwc_to_chw
 import cv2
 save_data = False
 

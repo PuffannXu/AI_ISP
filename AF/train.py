@@ -35,7 +35,9 @@ weight_bit = 4
 output_bit = 8
 clamp_std = 0
 noise_scale = 0.075
-
+channel_number = 4
+height = 224
+width = 224
 version = 2
 RELOAD_CHECKPOINT = True
 FREEZE = False
@@ -48,7 +50,7 @@ SAVE_LOG = False
 if qn_on:
     model_name = "I{}W{}O{}_n{}".format(str(input_bit),str(weight_bit),str(output_bit),noise_scale)
     #PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/model/I8W4O8n0.075_model_V2.pth")
-    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/{}/model_V{}.pth".format(model_name, version))#/model/I8W4O8n0.075_model_V2.pth")#I8W4O8_n0.075
+    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/model/AF_4channel.pth")#/model/I8W4O8n0.075_model_V2.pth")#I8W4O8_n0.075
 else:
     model_name = "FULL"
     PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AF/output/train/{}/model_V{}.pth".format(model_name, version))
@@ -69,11 +71,11 @@ def main(opt):
     # 定义路径
     # ======================================== #
     # log path
-    path_to_log = os.path.join("output", "train",  "{}".format(model_name))
+    path_to_log = os.path.join("model")
     os.makedirs(path_to_log, exist_ok=True)
     #model path
-    #path_to_model = os.path.join("output","trained_models", model_name)
-    #os.makedirs(path_to_model, exist_ok=True)
+    path_to_model = os.path.join("/home/project/xupf/Projects/AI_ISP/model_save/")
+    os.makedirs(path_to_model, exist_ok=True)
     if SAVE_LOG is True:
         # metrics path
         path_to_metrics_log = os.path.join(path_to_log, "metrics{}.csv".format(str(time.strftime('%Y%m%d_%H%M',time.localtime(time.time())))))
@@ -93,7 +95,7 @@ def main(opt):
     # ======================================== #
     # 模型初始化
     # ======================================== #
-    model = Model(qn_on = qn_on, version=version, weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std, noise_scale=noise_scale)
+    model = Model(channel_number = channel_number, qn_on = qn_on, version=version, weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std, noise_scale=noise_scale)
 
     if RELOAD_CHECKPOINT:
         print('\n Reloading checkpoint - pretrained model stored at: {} \n'.format(PATH_TO_PTH_CHECKPOINT))
@@ -112,7 +114,7 @@ def main(opt):
     # ======================================== #
     # 加载数据
     # ======================================== #
-    dataset = Dataset("/home/project/xupf/Databases/AF_{}".format(DATASET))
+    dataset = Dataset(channel_number=channel_number,height=height,width=width,basepath="/home/project/xupf/Databases/AF_{}".format(DATASET))
     train_size = int(len(dataset) * 0.8)
     test_size = len(dataset) - train_size
 
@@ -126,7 +128,7 @@ def main(opt):
     # 定义训练和测试函数
     # ======================================== #
     print("\n**************************************************************")
-    print("\t\t\t Training FC4")
+    print("\t\t\t Training AF")
     print("**************************************************************\n")
 
     evaluator = Evaluator()
@@ -230,7 +232,7 @@ def main(opt):
             best_val_loss = val_loss.avg
             best_metrics = evaluator.update_best_metrics()
             print("Saving new best model... \n")
-            model.save(path_to_log,"model_V{}.pth".format(version))
+            model.save(path_to_model,f"AF_{channel_number}x{height}x{width}.pth")
 
         if SAVE_LOG is True:
             log_metrics(train_loss.avg, val_loss.avg, metrics, best_metrics, path_to_metrics_log)

@@ -136,7 +136,7 @@ for filename in os.listdir(raw_folder):
     #plt.show()
 
     # Auto White Balance
-    ai_awb_img, wb = ai_awb(demos_img, sensor_info)
+    ai_awb_img, wb = ai_awb(demos_img/sensor_range, sensor_info)
 
     plt.subplot(3, 3, 6)
     plt.imshow(ai_awb_img/ai_awb_img.max())

@@ -7,7 +7,7 @@ import torch.utils.data
 from AWB.code.core.settings import DEVICE
 from AWB.code.core.Evaluator import Evaluator
 from AWB.code.ColorCheckerDataset import ColorCheckerDataset
-from AWB.model.Alex_FC4 import Model_V3
+from AWB.model.Alex_FC4 import Model
 
 
 """

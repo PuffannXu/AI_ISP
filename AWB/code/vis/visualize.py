@@ -1,5 +1,7 @@
 import os
 import time
+
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch.utils.data
@@ -15,7 +17,7 @@ from AWB.model.Alex_FC4 import Model
 from RRAM import my_utils as my
 
 # Set to -1 to process all the samples in the test set of the current fold
-NUM_SAMPLES = -1#20
+NUM_SAMPLES = 20
 
 # The number of folds to be processed (either 1, 2 or 3)
 NUM_FOLDS = 3
@@ -25,45 +27,53 @@ NUM_FOLDS = 3
 img_quant_flag = 1
 isint = 0
 qn_on = True
-input_bit = 8
+fp_on = False
+input_bit = 4
 weight_bit = 4
-output_bit = 8
+output_bit = 4
 clamp_std = 0
-noise_scale = 0.075
+noise_scale = 0
+channel_number = 4
+height = 224
+width = 224
 # Where to save the generated visualizations
 PATH_TO_SAVED = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/vis", "{}".format(str(time.strftime('%Y%m%d_%H%M',time.localtime(time.time())))))
 
 
 def main():
     evaluator = Evaluator()
-    model = Model(qn_on, weight_bit, output_bit, isint, clamp_std, noise_scale)
+    model = Model(channel_number, qn_on, fp_on, weight_bit, output_bit, isint, clamp_std, noise_scale)
     os.makedirs(PATH_TO_SAVED,exist_ok=True)
 
     for num_fold in range(NUM_FOLDS):
         test_set = ColorCheckerDataset(train=False, folds_num=num_fold)
         dataloader = DataLoader(test_set, batch_size=1, shuffle=False, num_workers=20)
-        path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
-
+        #path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/model/I8W4O8_n0.075_AWB_V2.pth")
+        path_to_pretrained = os.path.join("/home/project/xupf/Projects/AI_ISP/model_save/FULL.pth")
         model.load(path_to_pretrained)
         model.evaluation_mode()
 
         print("\n *** Generating visualizations for FOLD {} *** \n".format(num_fold))
         print(" * Test set size: {}".format(len(test_set)))
         print(" * Using pretrained model stored at: {} \n".format(path_to_pretrained))
-
+        img_rgb = np.empty((1,width,height,3),dtype = np.uint8)
         with torch.no_grad():
             for i, (img, label, file_name) in enumerate(dataloader):
                 if NUM_SAMPLES > -1 and i > NUM_SAMPLES - 1:
                     break
 
                 img, label = img.to(DEVICE), label.to(DEVICE)
-                original_fp32 = transforms.ToPILImage()(img.squeeze()).convert("RGB")
+                img_rgb[:,:,:,0] = img[:,0,:,:].cpu()
+                img_rgb[:,:,:,1] = img[:,1,:,:].cpu()
+                img_rgb[:,:,:,2] = img[:,3,:,:].cpu()
+                original_fp32 = transforms.ToPILImage()(img_rgb.squeeze()).convert("RGB")
 
                 if img_quant_flag == 1:
                     img, _ = my.data_quantization_sym(img, half_level=2 ** input_bit / 2 - 1)
                     # img = img / (2 ** input_bit)
                     img = img.float()
                 pred, rgb, confidence,a = model.predict(img, return_steps=True)
+
                 loss = model.get_loss(pred, label).item()
                 evaluator.add_error(loss)
                 file_name = file_name[0].split(".")[0]
@@ -74,9 +84,8 @@ def main():
                 path_to_save = os.path.join(PATH_TO_SAVED, "loss.csv")
                 save.to_csv(path_to_save, mode='a', header=False,index=False)
 
-                original = transforms.ToPILImage()(img.squeeze()).convert("RGB")
+                original = transforms.ToPILImage()(img_rgb.squeeze())#.convert("RGB")
                 original_gamma = linear_to_nonlinear(original)
-
                 gt_corrected, est_corrected = correct(original_fp32, label), correct(original, pred)
                 gt_corrected_gamma = linear_to_nonlinear(gt_corrected)
                 est_corrected_gamma = linear_to_nonlinear(est_corrected)
@@ -129,7 +138,7 @@ def main():
                                                                           pred.cpu().numpy()[0]))
                 fig.tight_layout(pad=1.2)
 
-                if loss > 6:
+                if loss > 0:
                     fig.show()
 
                 path_to_save = os.path.join(PATH_TO_SAVED, "fold_{}".format(num_fold), file_name)

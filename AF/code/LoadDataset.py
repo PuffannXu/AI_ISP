@@ -6,7 +6,7 @@ import numpy as np
 import torch
 import torch.utils.data as data
 import time
-from core.utils import scale,hwc_to_chw,crop
+from core.utils import scale, hwc_to_chw, crop, resize
 from torch.utils.data import DataLoader
 import cv2
 save_data = False
@@ -14,8 +14,10 @@ save_data = False
 
 class Dataset(data.Dataset):
 
-    def __init__(self, basepath="/home/project/xupf/Databases/AF_new", txt_path = None):
-
+    def __init__(self, channel_number=4,height=224,width=224,basepath="/home/project/xupf/Databases/AF_new", txt_path = None):
+        self.channel_number = channel_number
+        self.height = height
+        self.width = width
         #self.__path_to_data = os.path.join(basepath, "numpy_data")#("E:/Dataset/preprocessed", "numpy_data")#
         self.__path_to_label = os.path.join(basepath, "numpy_labels")#("E:/Dataset/preprocessed", "numpy_labels")#
         self.__path_to_data = os.path.join("/home/project/xupf/Databases/AF_train0_top", "visual_data")
@@ -36,21 +38,31 @@ class Dataset(data.Dataset):
         scaled_img512 = scale(img512)
         #fig, axs = plt.subplots(1,2)
         #axs[0].imshow(scaled_img512[:,:,0])
-        scaled_img256 = cv2.resize(scaled_img512, dsize = (256,256), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)#resize(scaled_img512, (256,256,2))
+        scaled_img256 = resize(scaled_img512, (self.height, self.width))
+        #scaled_img256 = cv2.resize(scaled_img512, dsize = (256,256), fx=0.5, fy=0.5, interpolation=cv2.INTER_NEAREST)#resize(scaled_img512, (256,256,2))
         cropped_img = crop(scaled_img256, 0.6, 0.6, 256 / 4)
-        scaled_img256 = cv2.resize(cropped_img, dsize=(256,256), interpolation=cv2.INTER_NEAREST)
+        #scaled_img256 = cv2.resize(cropped_img, dsize=(256,256), interpolation=cv2.INTER_NEAREST)
         #axs[1].imshow(scaled_img256[:,:,0])
         #fig.show()
         #pd_img = pd_img.reshape(-1, 256, 256)
         chw_scaled_img256 = hwc_to_chw(scaled_img256)
+        if (self.channel_number == 4):
+            img_rggb = np.empty((4, self.height, self.width), dtype=np.uint8)
+            img_rggb[0, :, :] = chw_scaled_img256[0, :, :]
+            img_rggb[1, :, :] = chw_scaled_img256[1, :, :]
+            img_rggb[2, :, :] = chw_scaled_img256[1, :, :]
+            img_rggb[3, :, :] = chw_scaled_img256[2, :, :]
+            img_copy = torch.from_numpy((img_rggb / 1).copy())
+        elif (self.channel_number == 3):
+            img_copy = torch.from_numpy((chw_scaled_img256 / 1).copy())
+        else:
+            img_copy = torch.from_numpy((chw_scaled_img256[1, :, :].copy()))
         #pd_img = pd_img.astype(float)
-        pd_img = torch.from_numpy(chw_scaled_img256.copy())
+
         focus_step = torch.from_numpy(focus_step.copy())
         focus_step = focus_step.squeeze()
 
-
-
-        return pd_img, focus_step, file_name
+        return img_copy, focus_step, file_name
 
     def __len__(self) -> int:
         return len(self.__fold_data)

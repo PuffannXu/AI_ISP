@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from core.utils import crop, depth2focus
+from core.af_utils import crop, depth2focus
 from core.settings import ROI_SIZE
 from matplotlib import pyplot as plt
 

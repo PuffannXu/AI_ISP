@@ -10,7 +10,7 @@ import torch.nn.functional as F
 
 
 class Model(Model):
-    def __init__(self,
+    def __init__(self,channel_number: int,
                  qn_on: bool, version: int,
                  weight_bit: int, output_bit: int,
                  isint: int,
@@ -21,7 +21,7 @@ class Model(Model):
             self._network = Net_V1(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
                                    isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
         elif version == 2:
-            self._network = Net_V2(qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
+            self._network = Net_V2(channel_number=channel_number,qn_on=qn_on, weight_bit=weight_bit, output_bit=output_bit,
                                    isint=isint, clamp_std=clamp_std, noise_scale=noise_scale).to(self._device)
 
     def predict(self, img: Tensor, return_steps: bool = False) -> Union[Tensor, Tuple]:
@@ -135,27 +135,39 @@ class Net_V1(Network):
 class Net_V2(Network):
 
     def __init__(self,
-                 qn_on: bool,
-                 weight_bit: int, output_bit: int,
-                 isint: int,
-                 clamp_std: int, noise_scale: float
-                 ):
+                 channel_number: int = 4,
+                 qn_on: bool = False,
+                 weight_bit: int = 4,
+                 output_bit: int = 8,
+                 isint: int = 0,
+                 clamp_std: int = 0,
+                 noise_scale: float = 0.075,):
         super().__init__()
-
-        def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
-            return nn.Sequential(
-                my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
+        if(qn_on):
+            def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
+                return nn.Sequential(
+                    my.Conv2d_quant_noise(qn_on=qn_on, in_channels=in_channels, out_channels=out_channels,
+                                      kernel_size=kernel_size,
                                       stride=stride, padding=padding,
                                       weight_bit=weight_bit, output_bit=output_bit, isint=isint, clamp_std=clamp_std,
                                       noise_scale=noise_scale,
-                                      bias=bias),
-            )
-        def fc(in_channels, out_channels, bias):
-            return nn.Sequential(
-                my.Linear_quant_noise(qn_on=qn_on, in_features=in_channels, out_features=out_channels, weight_bit=weight_bit, output_bit=output_bit, isint=isint,
-                                      clamp_std=clamp_std, noise_scale=noise_scale, bias=bias),
-            )
-        self.conv1 = conv2d(in_channels=3, out_channels=32, kernel_size=5, stride=2, padding=2, bias=False)
+                                      bias=bias),)
+
+            def fc(in_channels, out_channels, bias):
+                return nn.Sequential(
+                    my.Linear_quant_noise(qn_on=qn_on, in_features=in_channels, out_features=out_channels,
+                                          weight_bit=weight_bit, output_bit=output_bit, isint=isint,
+                                          clamp_std=clamp_std, noise_scale=noise_scale, bias=bias),)
+        else:
+            def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
+                return nn.Sequential(
+                    nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                              kernel_size=kernel_size, stride=stride, padding=padding, bias=bias),)
+            def fc(in_channels, out_channels, bias):
+                return nn.Sequential(
+                    nn.Linear(in_features=in_channels, out_features=out_channels,bias=bias),)
+
+        self.conv1 = conv2d(in_channels=channel_number, out_channels=32, kernel_size=5, stride=2, padding=2, bias=False)
         self.conv2 = conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1, bias=False)
         self.conv3 = conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=2, padding=1, bias=False)
         self.conv4 = conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=2, padding=1, bias=False)
