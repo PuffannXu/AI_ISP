@@ -14,6 +14,8 @@ from AWB.code.ColorCheckerDataset import ColorCheckerDataset
 from AWB.model.Alex_FC4 import Model
 from RRAM import my_utils as my
 import torchvision
+
+
 # --------------------------------------------------------------------------------------------------------------------
 # ======================================== #
 # 训练参数
@@ -25,12 +27,16 @@ LEARNING_RATE = 0.0001
 FOLD_NUM = 0
 SAVE_TB = False
 RELOAD_CHECKPOINT = True
+if RELOAD_CHECKPOINT:
+    EPOCHS = 5
 # ======================================== #
 # 量化训练参数
 # ======================================== #
-img_quant_flag = False
+img_quant_flag = True
 qn_on = True
-fp_on = True
+fp_on = 0
+quant_type = "layer" #"layer" "channel" "group"
+group_number = 128
 isint = 1
 input_bit = 8
 weight_bit = 8
@@ -41,18 +47,7 @@ channel_number = 4
 height = 224
 width = 224
 
-if fp_on:
-    model_name = "my_quant_fp"
-    PATH_TO_PTH_CHECKPOINT = os.path.join(f"/home/project/xupf/Projects/AI_ISP/model_save/FULL.pth")
-elif qn_on:
-    model_name = "my_quant_isint"
-    PATH_TO_PTH_CHECKPOINT = os.path.join(f"/home/project/xupf/Projects/AI_ISP/model_save/FULL.pth")
-    #PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
-else:
-    model_name = "FULL"
-    PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/FULL_fold_0")
-# The subset of test images to be monitored (set to empty list to skip saving visualizations and speed up training)
-# For example: TEST_VIS_IMG = ["IMG_0753", "IMG_0438", "IMG_0397"]
+
 TEST_VIS_IMG = []
 
 
@@ -62,6 +57,24 @@ TEST_VIS_IMG = []
 # --------------------------------------------------------------------------------------------------------------------
 
 def main(opt):
+    if fp_on == 2:
+        if quant_type == "group":
+            model_name = f"AWB_fp8_w_hw_{quant_type}{group_number}_epoch{EPOCHS}"
+        else:
+            model_name = f"AWB_fp8_w_hw_{quant_type}_epoch{EPOCHS}"
+        PATH_TO_PTH_CHECKPOINT = os.path.join(f"/home/project/xupf/Projects/AI_ISP/model_save/AWB_FULL.pth")
+    elif fp_on == 1:
+        model_name = f"AWB_fp8_wo_hw_epoch{EPOCHS}"
+        PATH_TO_PTH_CHECKPOINT = os.path.join(f"/home/project/xupf/Projects/AI_ISP/model_save/AWB_FULL.pth")
+    elif qn_on:
+        model_name = f"AWB_I{input_bit}W{weight_bit}_epoch{EPOCHS}"
+        PATH_TO_PTH_CHECKPOINT = os.path.join(f"/home/project/xupf/Projects/AI_ISP/model_save/AWB_FULL.pth")
+        # PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/I8W4O8_n0.075_fold_0/model_VAlex.pth")
+    else:
+        model_name = "AWB_FULL"
+        PATH_TO_PTH_CHECKPOINT = os.path.join("/home/project/xupf/Projects/AI_ISP/AWB/output/train/AWB_FULL.pth")
+    # The subset of test images to be monitored (set to empty list to skip saving visualizations and speed up training)
+    # For example: TEST_VIS_IMG = ["IMG_0753", "IMG_0438", "IMG_0397"]
     fold_num, epochs, batch_size, lr = opt.fold_num, opt.epochs, opt.batch_size, opt.lr
     # ======================================== #
     # 实例化SummaryWriter对象
@@ -73,11 +86,15 @@ def main(opt):
     # 定义路径
     # ======================================== #
     # log path
-    path_to_log = os.path.join("model")
+    path_to_log = os.path.join(f"output/train/{model_name}_{str(time.strftime('%Y%m%d_%H%M', time.localtime(time.time())))}")
     os.makedirs(path_to_log, exist_ok=True)
-    #model path
+    # model path
     path_to_model = os.path.join("/home/project/xupf/Projects/AI_ISP/model_save/")
     os.makedirs(path_to_model, exist_ok=True)
+
+    # 设置日志
+    logger = my.setup_logger(name='FP8Logger', log_file=f'{path_to_log}/train.log')
+
     # metrics path
     path_to_metrics_log = os.path.join(path_to_log, "metrics{}.csv".format(str(time.strftime('%Y%m%d_%H%M',time.localtime(time.time())))))
     cfg = ("\n *** Training configuration ***")\
@@ -104,13 +121,13 @@ def main(opt):
     # ======================================== #
     # 模型初始化
     # ======================================== #
-    model = Model(channel_number, qn_on, fp_on, weight_bit, output_bit, isint, clamp_std, noise_scale)
+    model = Model(channel_number, qn_on, fp_on, weight_bit, output_bit, isint, clamp_std, noise_scale, quant_type, group_number )
     if RELOAD_CHECKPOINT:
         print('\n Reloading checkpoint - pretrained model stored at: {} \n'.format(PATH_TO_PTH_CHECKPOINT))
         model.load(PATH_TO_PTH_CHECKPOINT)
 
     model.print_network()
-    model.log_network((channel_number,height,width),path_to_log)
+    # model.log_network((channel_number,height,width),path_to_log)
     model.set_optimizer(lr)
     # ======================================== #
     # 加载数据
@@ -292,6 +309,27 @@ if __name__ == '__main__':
     opt = parser.parse_args()
     make_deterministic(opt.random_seed)
 
+    # fp_on = 1
+    # print("\n *** Training configuration ***")
+    # print("\t Fold num ........ : {}".format(opt.fold_num))
+    # print("\t Epochs .......... : {}".format(opt.epochs))
+    # print("\t Batch size ...... : {}".format(opt.batch_size))
+    # print("\t Learning rate ... : {}".format(opt.lr))
+    # print("\t Random seed ..... : {}".format(opt.random_seed))
+    #
+    # print("\n *** RRAM configuration ***")
+    # print("\t img_quant_flag .. : {}".format(img_quant_flag))
+    # print("\t qn_on ........... : {}".format(qn_on))
+    # print("\t isint ........... : {}".format(isint))
+    # print("\t input_bit ...... : {}".format(input_bit))
+    # print("\t weight_bit ...... : {}".format(weight_bit))
+    # print("\t output_bit ...... : {}".format(output_bit))
+    # print("\t noise_scale ..... : {}".format(noise_scale))
+    # print("\t clamp_std ....... : {}".format(clamp_std))
+    # main(opt)
+
+    fp_on = 2
+    quant_type = "layer"  # "layer" "channel" "group"
     print("\n *** Training configuration ***")
     print("\t Fold num ........ : {}".format(opt.fold_num))
     print("\t Epochs .......... : {}".format(opt.epochs))
@@ -311,3 +349,35 @@ if __name__ == '__main__':
 
     main(opt)
 
+    fp_on = 2
+    quant_type = "channel"
+    print("\n *** Training configuration ***")
+    print("\t Fold num ........ : {}".format(opt.fold_num))
+    print("\t Epochs .......... : {}".format(opt.epochs))
+    print("\t Batch size ...... : {}".format(opt.batch_size))
+    print("\t Learning rate ... : {}".format(opt.lr))
+    print("\t Random seed ..... : {}".format(opt.random_seed))
+
+    print("\n *** RRAM configuration ***")
+    print("\t img_quant_flag .. : {}".format(img_quant_flag))
+    print("\t qn_on ........... : {}".format(qn_on))
+    print("\t isint ........... : {}".format(isint))
+    print("\t input_bit ...... : {}".format(input_bit))
+    print("\t weight_bit ...... : {}".format(weight_bit))
+    print("\t output_bit ...... : {}".format(output_bit))
+    print("\t noise_scale ..... : {}".format(noise_scale))
+    print("\t clamp_std ....... : {}".format(clamp_std))
+    main(opt)
+
+    fp_on = 2
+    quant_type = "group"
+    for group_number in [9, 72, 288]:
+        print(f'==================== group_number is {group_number} ====================')
+        main(opt)
+
+    # if fp_on == 2 and quant_type == "group":
+    #     for group_number in [9,72,288]:
+    #         print(f'==================== group_number is {group_number} ====================')
+    #         main(opt)
+    # else:
+    #     main(opt)

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # 加载 .pth 文件
-model_path = 'my_quant_isint.pth'
+model_path = 'AWB_FULL.pth'
 model_weights = torch.load(model_path)
 weight_bit = 8
 bin_num = 2 << weight_bit -1

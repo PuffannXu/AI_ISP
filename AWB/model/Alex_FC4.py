@@ -19,12 +19,14 @@ from core.AngularLoss import AngularLoss
 class Model(Model):
     def __init__(self,channel_number: int,
                  qn_on: bool,
-                 fp_on: bool,
+                 fp_on: int,
                  weight_bit: int, output_bit: int,
                  isint: int,
-                 clamp_std: int, noise_scale: float,):
+                 clamp_std: int, noise_scale: float, quant_type = 'None',
+                 group_number = 72):
         super().__init__()
-        self._network = Net_DCIM(channel_number, qn_on, fp_on, weight_bit, output_bit, isint, clamp_std).to(self._device)
+        self._network = Net_DCIM(channel_number, qn_on, fp_on, weight_bit, output_bit, isint, clamp_std, quant_type,
+                 group_number).to(self._device)
         # if qn_on:
         #     self._network = Net_DCIM_QAT(channel_number, qn_on, weight_bit,output_bit,isint,clamp_std).to(self._device)
         # else:
@@ -209,12 +211,18 @@ class Net_in_channel(torch.nn.Module):
                  isint: int = 0,
                  clamp_std: int = 0,
                  noise_scale: float = 0.075,
-                 fp_on: bool = False,):
+                 fp_on: int = 0,):
         super().__init__()
-        if(fp_on):
+        if(fp_on==1):
             def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
                 return nn.Sequential(
                     my.Conv2d_fp8(in_channels=in_channels, out_channels=out_channels,
+                                      kernel_size=kernel_size,
+                                      stride=stride, padding=padding, bias=bias),)
+        elif(fp_on==2):
+            def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
+                return nn.Sequential(
+                    my.Conv2d_fp8_hw(in_channels=in_channels, out_channels=out_channels,
                                       kernel_size=kernel_size,
                                       stride=stride, padding=padding, bias=bias),)
         elif(qn_on):
@@ -335,18 +343,28 @@ class Net_DCIM(torch.nn.Module):
     def __init__(self,
                  channel_number: int = 4,
                  qn_on: bool = False,
-                 fp_on: bool = False,
+                 fp_on: int = 0,
                  weight_bit: int = 4,
                  output_bit: int = 8,
                  isint: int = 0,
-                 clamp_std: int = 0):
+                 clamp_std: int = 0,
+                 quant_type: str ='None',
+                 group_number: int =72
+                 ):
         super().__init__()
-        if (fp_on):
+        if(fp_on==1):
             def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
                 return nn.Sequential(
                     my.Conv2d_fp8(in_channels=in_channels, out_channels=out_channels,
-                                  kernel_size=kernel_size,
-                                  stride=stride, padding=padding, bias=bias), )
+                                      kernel_size=kernel_size,
+                                      stride=stride, padding=padding, bias=bias),)
+        elif(fp_on==2):
+            def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias,quant_type,
+                 group_number):
+                return nn.Sequential(
+                    my.Conv2d_fp8_hw(in_channels=in_channels, out_channels=out_channels,
+                                      kernel_size=kernel_size,
+                                      stride=stride, padding=padding, bias=bias,quant_type = quant_type, group_number = group_number),)
         elif (qn_on):
             def conv2d(in_channels, out_channels, kernel_size, stride, padding, bias):
                 return nn.Sequential(
@@ -360,23 +378,44 @@ class Net_DCIM(torch.nn.Module):
                 return nn.Sequential(
                     nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
                               kernel_size=kernel_size, stride=stride, padding=padding, bias=bias),)
-        self.conv1 = conv2d(in_channels=channel_number,   out_channels=32,   kernel_size=3, stride=2, padding=3, bias=False)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
-        self.conv2 = conv2d(in_channels=32,  out_channels=64,   kernel_size=3, stride=2, padding=1, bias=False)
-        self.relu2 = nn.ReLU(inplace=True)
-        self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
-        self.conv3 = conv2d(in_channels=64,  out_channels=128,  kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu3 = nn.ReLU(inplace=True)
-        self.conv4 = conv2d(in_channels=128, out_channels=256,  kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu4 = nn.ReLU(inplace=True)
-        self.conv5 = conv2d(in_channels=256, out_channels=256,  kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu5 = nn.ReLU(inplace=True)
-        self.maxpool5 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
-        self.conv6 = conv2d(in_channels=256, out_channels=64,   kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu6 = nn.ReLU(inplace=True)
-        self.conv7 = conv2d(in_channels=64,  out_channels=4 if USE_CONFIDENCE_WEIGHTED_POOLING else 3, kernel_size=3, stride=1, padding=1, bias=False)
-        self.relu7 = nn.ReLU(inplace=True)
+
+        if(fp_on==2):
+            self.conv1 = conv2d(in_channels=channel_number, out_channels=32, kernel_size=3, stride=2, padding=3, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu1 = nn.ReLU(inplace=True)
+            self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv2 = conv2d(in_channels=32, out_channels=64, kernel_size=3, stride=2, padding=1, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu2 = nn.ReLU(inplace=True)
+            self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv3 = conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu3 = nn.ReLU(inplace=True)
+            self.conv4 = conv2d(in_channels=128, out_channels=256, kernel_size=3, stride=1, padding=1, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu4 = nn.ReLU(inplace=True)
+            self.conv5 = conv2d(in_channels=256, out_channels=256, kernel_size=3, stride=1, padding=1, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu5 = nn.ReLU(inplace=True)
+            self.maxpool5 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv6 = conv2d(in_channels=256, out_channels=64, kernel_size=3, stride=1, padding=1, bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu6 = nn.ReLU(inplace=True)
+            self.conv7 = conv2d(in_channels=64, out_channels=4 if USE_CONFIDENCE_WEIGHTED_POOLING else 3, kernel_size=3, stride=1, padding=1,
+                                bias=False,quant_type = quant_type, group_number = group_number)
+            self.relu7 = nn.ReLU(inplace=True)
+        else:
+            self.conv1 = conv2d(in_channels=channel_number,   out_channels=32,   kernel_size=3, stride=2, padding=3, bias=False)
+            self.relu1 = nn.ReLU(inplace=True)
+            self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv2 = conv2d(in_channels=32,  out_channels=64,   kernel_size=3, stride=2, padding=1, bias=False)
+            self.relu2 = nn.ReLU(inplace=True)
+            self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv3 = conv2d(in_channels=64,  out_channels=128,  kernel_size=3, stride=1, padding=1, bias=False)
+            self.relu3 = nn.ReLU(inplace=True)
+            self.conv4 = conv2d(in_channels=128, out_channels=256,  kernel_size=3, stride=1, padding=1, bias=False)
+            self.relu4 = nn.ReLU(inplace=True)
+            self.conv5 = conv2d(in_channels=256, out_channels=256,  kernel_size=3, stride=1, padding=1, bias=False)
+            self.relu5 = nn.ReLU(inplace=True)
+            self.maxpool5 = nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)
+            self.conv6 = conv2d(in_channels=256, out_channels=64,   kernel_size=3, stride=1, padding=1, bias=False)
+            self.relu6 = nn.ReLU(inplace=True)
+            self.conv7 = conv2d(in_channels=64,  out_channels=4 if USE_CONFIDENCE_WEIGHTED_POOLING else 3, kernel_size=3, stride=1, padding=1, bias=False)
+            self.relu7 = nn.ReLU(inplace=True)
 
     def post_norm(self, out):
         # Per-patch color estimates (last 3 dimensions)
